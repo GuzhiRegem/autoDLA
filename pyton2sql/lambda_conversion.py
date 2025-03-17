@@ -2,7 +2,7 @@ import ast
 import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, get_origin
-from data_conversion import DataTransformer
+from data_conversion import DataTransformer, MethodArgument
 from datetime import datetime
 
 class LambdaFinder(ast.NodeVisitor):
@@ -37,141 +37,12 @@ class NodeReturn:
     tp: type
     eval: Any = None
 
-OPERATOR_DICT = {
-    "numeric": {
-        'Eq': "=",
-        'NotEq': "<>",
-        'Lt': "<",
-        'LtE': "<=",
-        'Gt': ">",
-        'GtE': ">=",
-        'In': "IN",
-        'NotIn': "NOT IN",
-        'Is': "IS",
-        'IsNot': "IS NOT"
-    },
-    "binary": {
-        "Add": lambda x, y: f'{x} + {y}',
-        "Sub": lambda x, y: f'{x} - {y}',
-        "Mult": lambda x, y: f'{x} * {y}',
-        "Div": lambda x, y: f'{x} / {y}',
-        "FloorDiv": lambda x, y: f'FLOOR({x} / {y})',
-        "Mod": lambda x, y: f'{x} % {y}',
-        "Pow": lambda x, y: f'POWER({x},{y})'
-    },
-    "boolean": {
-        "And": 'AND',
-        "Or": 'OR',
-    },
-    "unary": {
-        "Not": 'NOT'
-    }
-}
-
-class GlobalTypedMethod:
-    def __init__(self, return_type: type, definition : str, args : dict[type]):
-        self.return_type = return_type
-        self.definition = definition
-        self.args = args
-    
-    def check_type(self, expected_type, compared_type):
-        if type(expected_type) == list:
-            for type_i in expected_type:
-                if type_i is None and compared_type is None:
-                    return True
-                if compared_type == type_i:
-                    return True
-        elif compared_type == expected_type:
-            return True
-        return False
-    
-    def __call__(self, *args, **kwds):
-        keys = list(self.args.keys())
-        arguments = {}
-        for i, k in enumerate(keys):
-            v = None
-            if i < len(args):
-                v = args[i]
-            if k in kwds:
-                v = kwds[k]
-            if not self.check_type(self.args[k], getattr(v, 'tp', None)):
-                raise TypeError(f"expected type {self.args[k]} for argument {k}, got {type(v)}")
-            arguments[k] = getattr(v, 'st', None)
-        return self.definition(arguments), self.return_type
-
-class TypedMethod(GlobalTypedMethod):
-    def __init__(self, caller_type: type, return_type: type, definition : str, args : dict[type]):
-        self.caller_type = caller_type
-        super().__init__(return_type, definition, args)
-    
-    def __call__(self, caller, *args, **kwds):
-        keys = list(self.args.keys())
-        arguments = {}
-        for i, k in enumerate(keys):
-            v = None
-            if i < len(args):
-                v = args[i]
-            if k in kwds:
-                v = kwds[k]
-            if not self.check_type(self.args[k], v.tp if v is not None else None):
-                raise TypeError(f"expected type {self.args[k]} for argument {k}, got {v.tp}")
-            arguments[k] = v.st
-        if not self.check_type(self.caller_type, caller.tp):
-            raise TypeError(f"expected caller type {self.caller_type}, got {caller.tp}")
-        arguments["caller"] = caller.st
-        return self.definition(arguments), self.return_type
-
-
-
-METHODS_MAP = {
-    "global": {
-        'round': GlobalTypedMethod(
-            int,
-            lambda data: f"ROUND({data['value']}{str(', ' + data['digits']) if data['digits'] is not None else ''})",
-            {"value": [float, int], 'digits': [int, None]}
-        ),
-        'abs': GlobalTypedMethod(
-            int,
-            lambda data: f'ABS({data["value"]})',
-            {'value': [float, int]}
-        )
-    },
-    "by_type": {
-        str: {
-            "lower": TypedMethod(
-                str, str,
-                lambda data: f"LOWER({data['caller']})",
-                {}
-            ),
-            "startswith": TypedMethod(
-                str, bool,
-                lambda data: f"({data['caller']} LIKE '{data['value'][1:-1]}%')",
-                {"value": str}
-            )
-        },
-        datetime: {
-            "year": TypedMethod(
-                datetime, int,
-                lambda data: f"EXTRACT(YEAR FROM {data['caller']})",
-                {}
-            ),
-        }
-    }
-}
-
 class LambdaToSql(ast.NodeVisitor):
     def __init__(self, root : ast.Lambda, schema, data_transformer : DataTransformer, ctx_vars = {}):
         self.ctx_vars = ctx_vars
         self.schema = schema
         self.root = root
         self.data_transformer = data_transformer
-    
-    def get_operator(self, operator_type: Literal["numeric", "binary", "boolean", "unary"], op):
-        """Convert Python comparison operators to SQL operators"""
-        out = OPERATOR_DICT[operator_type].get(type(op).__name__)
-        if out is None:
-            raise ValueError(f"Unsupported {operator_type} operator: {op.__class__.__name__}")
-        return out
     
     def evaluate_node(self, node):
         return eval(str(ast.unparse(node)), self.ctx_vars)
@@ -198,7 +69,6 @@ class LambdaToSql(ast.NodeVisitor):
         match type(node).__name__:
             case 'Call':
                 args = [self.parse_node(arg) for arg in node.args]
-                
                 caller = None
                 func_name = ""
                 func = None
@@ -209,9 +79,9 @@ class LambdaToSql(ast.NodeVisitor):
                         func = getattr(caller.eval, func_name)
                 else:
                     func_name = node.func.id
-                    if func_name in self.ctx_vars:
-                        f = self.ctx_vars.get(func_name)
-                        if type(f) in [Callable, type(round)]:
+                    f = self.ctx_vars.get(func_name)
+                    if f is not None:
+                        if isinstance(f, Callable):
                             func = f
                         if type(f) == type(int) and all([arg.eval is not None for arg in args]):
                             res = f(*[arg.eval for arg in args])
@@ -223,14 +93,14 @@ class LambdaToSql(ast.NodeVisitor):
                     return self.evaluate_and_parse_node(node)
                 
                 if caller is None:
-                    found = METHODS_MAP["global"].get(func_name)
+                    found = self.data_transformer.get_method(None, func_name)
                     if found is not None:
-                        st, tp = found(*args)
+                        st, tp = found(*[MethodArgument(arg.st, arg.tp) for arg in args])
                         return NodeReturn(st, tp)
                 else:
-                    found = METHODS_MAP["by_type"][caller.tp].get(func_name)
+                    found = self.data_transformer.get_method(caller.tp, func_name)
                     if found is not None:
-                        st, tp = found(caller, *args)
+                        st, tp = found(MethodArgument(caller.st, caller.tp), *[MethodArgument(arg.st, arg.tp) for arg in args])
                         return NodeReturn(st, tp)
                 raise ValueError(f'function {func_name} not found')
             
@@ -242,7 +112,7 @@ class LambdaToSql(ast.NodeVisitor):
                     return NodeReturn(st_out, list, eval_list)
                 return NodeReturn(st_out, list)
             case 'UnaryOp':
-                op = self.get_operator("unary", node.op)
+                op = self.data_transformer.get_operator("unary", node.op)
                 child = self.parse_node(node.operand)
                 if child.eval is not None:
                     return self.evaluate_and_parse_node(node)
@@ -255,7 +125,7 @@ class LambdaToSql(ast.NodeVisitor):
                 for i in values:
                     if i.tp != bool:
                         raise TypeError(f"expression '{i.st}' is not a valid Boolean")
-                op = self.get_operator("boolean", node.op)
+                op = self.data_transformer.get_operator("boolean", node.op)
                 out = f' {op} '.join([i.st for i in values])
                 if all([arg.eval is not None for arg in values]):
                     return self.evaluate_and_parse_node(node)
@@ -266,7 +136,7 @@ class LambdaToSql(ast.NodeVisitor):
             case 'BinOp':
                 left = self.parse_node(node.left)
                 right = self.parse_node(node.right)
-                func = self.get_operator("binary", node.op)
+                func = self.data_transformer.get_operator("binary", node.op)
                 if left.tp != right.tp:
                     raise TypeError(f"invalid operation between {left.tp} and {right.tp}")
                 if left.eval is not None and right.eval is not None:
@@ -293,7 +163,7 @@ class LambdaToSql(ast.NodeVisitor):
                 )
             case 'Compare':
                 left = self.parse_node(node.left)
-                op = self.get_operator("numeric", node.ops[0])
+                op = self.data_transformer.get_operator("numeric", node.ops[0])
                 right = self.parse_node(node.comparators[0])
                 if left.tp != right.tp and left.tp != list and right.tp != list:
                     raise TypeError(f"invalid comparission between {left.tp} and {right.tp}")
