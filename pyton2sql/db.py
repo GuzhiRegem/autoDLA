@@ -4,6 +4,7 @@ from data_conversion import DataTransformer, DataConversion
 from datetime import date, datetime
 
 CONNECTION_URL = "postgresql://postgres:password@localhost/my_db"
+CONNECTION_URL = "postgresql://my_user:password@localhost/my_db"
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 class PostgresDataTransformer(DataTransformer):

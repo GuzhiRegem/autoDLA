@@ -1,9 +1,12 @@
 from db import PostgresDB
 from datetime import datetime, timedelta, date
 from lambda_conversion import lambda_to_sql, lambda_to_text, extract_variables_from_lambda
+import os
 
 import random
 select_random = lambda x: x[int(random.random() * len(x))]
+import builtins
+GLOBAL_DICT = {**vars(builtins), **globals(), **locals()}
 
 db = PostgresDB()
 schema = {
@@ -47,13 +50,12 @@ class PostgresDataTransformer(DataTransformer):
         datetime: DataConversion("TIMESTAMP", lambda x: f"'{x.srtftime(DATETIME_FORMAT)}'")
     }
 
-
 def test_function(func):
     print("LAMBDA:\n", lambda_to_text(func))
     try:
-        print("SQL:\n", lambda_to_sql(schema, func, db.data_transformer, ctx_vars={**locals(), **globals()}, ))
+        print("SQL:\n", lambda_to_sql(schema, func, db.data_transformer, ctx_vars={**GLOBAL_DICT, **globals(), **locals()}, ))
     except Exception as e:
-        print("ERROR:\n", str(e))
+        print("ERROR:", e)
     print('---------------\n')
 
 import json
@@ -104,6 +106,7 @@ test_function(lambda x: x.created_at >= datetime.now())
 print("#####################\ncustom_var = 20\n#####################")
 custom_var = 20
 test_function(lambda x: x.age > custom_var)
+test_function(lambda x: x.age > custom_var + 1)
 test_function(lambda x: x.age > var2)
 
 print("#####################\ndef my_func(n):\n    return n + 2\n#####################")
@@ -117,3 +120,6 @@ test_function(lambda x: x.name.startswith("m"))
 test_function(lambda x: "martin".startswith("m"))
 test_function(lambda x: x.age == round(x.age))
 test_function(lambda x: x.age == round(15.5))
+
+test_function(lambda x: 2 == 2)
+test_function(lambda x: 2 + 2)
