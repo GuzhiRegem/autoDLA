@@ -49,7 +49,7 @@ class LambdaToSql(ast.NodeVisitor):
     
     def repr(self, obj):
         st = repr(obj)
-        if type(obj) in [Callable, type(round), type("".startswith), type(inspect)]:
+        if isinstance(obj, Callable):
             st = obj.__name__
             if hasattr(obj, '__self__'):
                 st = self.repr(obj.__self) + '.' + st
