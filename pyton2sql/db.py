@@ -9,6 +9,7 @@ DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 class PostgresDataTransformer(DataTransformer):
     TYPE_DICT= {
+        type(None): DataConversion('', lambda x: "NULL"),
         int: DataConversion('INTEGER'),
         float: DataConversion("REAL"),
         str: DataConversion("TEXT", lambda x: f"'{x}'"),
@@ -56,17 +57,7 @@ class PostgresDB:
     @property
     def data_transformer(self):
         return self.__data_transformer
-    
-    def to_str(self, value):
-        match type(value).__name__:
-            case 'str':
-                return f"'{value}'"
-            case 'datetime':
-                return f"'{value.strftime(DATETIME_FORMAT)}'"
-            case _:
-                return str(value)
                 
-
     def execute_statement(self, statement, commit=False):
         if statement[-1] != ';':
             statement += ';'

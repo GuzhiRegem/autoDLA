@@ -73,6 +73,7 @@ test_function(lambda x: x.age >= 21)
 test_function(lambda x: x.age <= 30)
 test_function(lambda x: x.age == 25)
 test_function(lambda x: x.age != 40)
+test_function(lambda x: x.age != 40)
 
 # Logical combinations
 test_function(lambda x: x.age > 18 and x.age < 65)
@@ -99,6 +100,8 @@ test_function(lambda x: x.ages + 2)   # Non-existent column
 test_function(lambda x: x.age > 2 and x.age + 3)  # Unusual logical combination
 
 # Additional edge cases
+test_function(lambda x: x.name is None)
+test_function(lambda x: x.name is not None)
 test_function(lambda x: x.mass == 0.0)
 test_function(lambda x: x.created_at >= datetime.now())
 
@@ -121,5 +124,10 @@ test_function(lambda x: "martin".startswith("m"))
 test_function(lambda x: x.age == round(x.age))
 test_function(lambda x: x.age == round(15.5))
 
+#eval
 test_function(lambda x: 2 == 2)
 test_function(lambda x: 2 + 2)
+
+#conditional
+test_function(lambda x: 'Minor' if x.age < 18 else 'Adult')
+test_function(lambda x: 'Minor' if 12 < 18 else 'Adult')

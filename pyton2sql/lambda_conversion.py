@@ -37,6 +37,14 @@ class NodeReturn:
     tp: type
     eval: Any = None
 
+def pn(node):
+        print()
+        if isinstance(node, ast.AST):
+            print(ast.dump(node))
+        else:
+            print(node)
+        print()
+
 class LambdaToSql(ast.NodeVisitor):
     def __init__(self, root : ast.Lambda, schema, data_transformer : DataTransformer, ctx_vars = {}):
         self.ctx_vars = ctx_vars
@@ -64,9 +72,34 @@ class LambdaToSql(ast.NodeVisitor):
     def evaluate_and_parse_node(self, node):
         out = self.obj_to_node(self.evaluate_node(node))
         return self.parse_node(out)
+    
+    def node_compatibility(self, node1 : NodeReturn, node2: NodeReturn):
+        if isinstance(node1, type(node2)) or isinstance(node2, type(node1)):
+            return True
+        if node1 is None or node2 is None:
+            return True
+        if isinstance(node1, list):
+            if all([self.node_compatibility(arg, node2) for arg in node1]):
+                return True
+        elif isinstance(node2, list):
+            if all([self.node_compatibility(arg, node1) for arg in node2]):
+                return True
+        return False
 
     def parse_node(self, node):
         match type(node).__name__:
+            case 'IfExp':
+                condition = self.parse_node(node.test)
+                condition_value = self.parse_node(node.body)
+                else_value = self.parse_node(node.orelse)
+                if all([getattr(arg, 'eval', None) is not None for arg in [condition, condition_value, else_value]]):
+                    return self.evaluate_and_parse_node(node)
+                if condition.tp != bool:
+                    raise TypeError('condition is not a valid bool')
+                if not self.node_compatibility(condition_value, else_value):
+                    raise TypeError('values for if should be of same type')
+                st = f'(CASE WHEN {condition.st} THEN {condition_value.st} ELSE {else_value.st} END)'
+                return NodeReturn(st, condition_value.tp)
             case 'Call':
                 args = [self.parse_node(arg) for arg in node.args]
                 caller = None
@@ -165,7 +198,7 @@ class LambdaToSql(ast.NodeVisitor):
                 left = self.parse_node(node.left)
                 op = self.data_transformer.get_operator("numeric", node.ops[0])
                 right = self.parse_node(node.comparators[0])
-                if left.tp != right.tp and left.tp != list and right.tp != list:
+                if not self.node_compatibility(left, right):
                     raise TypeError(f"invalid comparission between {left.tp} and {right.tp}")
                 if left.eval is not None and right.eval is not None:
                     return self.evaluate_and_parse_node(node)
