@@ -1,6 +1,6 @@
-from db import PostgresDB
+from postgresdb import PostgresDB
 from datetime import datetime, timedelta, date
-from lambda_conversion import lambda_to_sql, lambda_to_text, extract_variables_from_lambda
+from lambda_conversion import lambda_to_sql, lambda_to_text
 import os
 
 import random

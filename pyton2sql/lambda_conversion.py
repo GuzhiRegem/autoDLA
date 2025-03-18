@@ -1,7 +1,7 @@
 import ast
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, get_origin
+from typing import Any, Callable
 from data_conversion import DataTransformer, MethodArgument
 from datetime import datetime
 
@@ -233,17 +233,7 @@ class LambdaToSql(ast.NodeVisitor):
         out = self.parse_node(self.root.body)
         return out
 
-
-def extract_variables_from_lambda(lambda_func, ctx_vars = {}):
-    out = {}
-    lambda_node = lambda_to_ast(lambda_func)
-    for node in ast.walk(lambda_node):
-        if type(node).__name__ == 'Name':
-            out[node.id] = ctx_vars.get(node.id)
-    return out
-
 def lambda_to_sql(schema, lambda_func, data_transformer : DataTransformer, ctx_vars={}):
     lambda_node = lambda_to_ast(lambda_func)
-    vars_dict = extract_variables_from_lambda(lambda_func, ctx_vars)
     out = LambdaToSql(lambda_node, schema, data_transformer=data_transformer, ctx_vars=ctx_vars).transform()
     return out.st
