@@ -1,4 +1,7 @@
+import polars as pl
+from typing import Dict, List, Tuple, Any, Optional, Union, Callable
 
 
 class DB:
-    pass
+    def execute(self, query: str) -> pl.DataFrame:
+        pass
