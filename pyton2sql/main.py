@@ -1,7 +1,7 @@
-from postgresdb import PostgresDB
+from autoDLA.pyton2sql.dbs.postgresdb import PostgresDB
 from datetime import datetime, timedelta, date
-from lambda_conversion import lambda_to_sql, lambda_to_text
 import os
+
 
 import random
 select_random = lambda x: x[int(random.random() * len(x))]
@@ -37,18 +37,6 @@ for i in range(200):
     inserts.append(data)
 db.insert_into_table('user', schema, inserts)
 print()
-
-
-from data_conversion import DataTransformer, DataConversion, DATETIME_FORMAT
-class PostgresDataTransformer(DataTransformer):
-    TYPE_DICT= {
-        int: DataConversion('INTEGER'),
-        float: DataConversion("REAL"),
-        str: DataConversion("TEXT", lambda x: f"'{x}'"),
-        bool: DataConversion("BOOL", lambda x: {True: "TRUE", False: "FALSE"}[x]),
-        date: DataConversion("DATE", lambda x: f"'{x.year}-{x.month}-{x.day}'"),
-        datetime: DataConversion("TIMESTAMP", lambda x: f"'{x.srtftime(DATETIME_FORMAT)}'")
-    }
 
 def test_function(func):
     print("LAMBDA:\n", lambda_to_text(func))
