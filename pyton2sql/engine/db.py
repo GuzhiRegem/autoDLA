@@ -18,6 +18,10 @@ class DB_Connection:
     @property
     def data_transformer(self):
         return self.__data_transformer
+    
+    def attach(self, objects):
+        for obj in objects:
+            obj.set_db(self)
 
     def execute(self, query: str) -> pl.DataFrame:
         print("---------------")
@@ -25,18 +29,19 @@ class DB_Connection:
         print("---------------")
         pass
 
-    def ensure_table(self, table_name, schema):
-        schema = self.data_transformer.convert_data_schema(schema)
-        self.execute(self.query.drop_table(table_name).if_exists())
-        self.execute(self.query.create_table(table_name).columns(*[f"{k} {v}" for k, v in schema.items()]))
+    def normalize_statment(self, statement: str) -> str:
+        if hasattr(statement, "QUOTE_CHAR"):
+            statement.QUOTE_CHAR = ""
+        if not isinstance(statement, str):
+            statement = str(statement)
+        statement = statement.lstrip().rstrip()
+        if statement[-1] != ";":
+            statement += ";"
+        return statement
 
-if __name__ == "__main__":
-    from autoDLA.pyton2sql.dbs.postgresdb import PostgresDataTransformer
-    from pypika import PostgreSQLQuery
-    db = DB_Connection(PostgresDataTransformer(), PostgreSQLQuery)
-    schema = {
-        "name": str,
-        "age": int,
-        "mass": float
-    }
-    db.ensure_table('user', schema)
+    def ensure_table(self, table_name, schema):
+        data_schema = {k: v["type"] for k, v in schema.items()}
+        schema = self.data_transformer.convert_data_schema(data_schema)
+        self.execute(self.query.drop_table(table_name).if_exists())
+        qry = self.query.create_table(table_name).columns(*[f"{k} {v}" for k, v in schema.items()])
+        self.execute(qry)
