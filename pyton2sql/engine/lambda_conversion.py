@@ -46,11 +46,12 @@ def pn(node):
         print()
 
 class LambdaToSql(ast.NodeVisitor):
-    def __init__(self, root : ast.Lambda, schema, data_transformer : DataTransformer, ctx_vars = {}):
+    def __init__(self, root : ast.Lambda, schema, data_transformer : DataTransformer, ctx_vars = {}, alias='x'):
         self.ctx_vars = ctx_vars
         self.schema = schema
         self.root = root
         self.data_transformer = data_transformer
+        self.alias = alias
     
     def evaluate_node(self, node):
         return eval(str(ast.unparse(node)), self.ctx_vars)
@@ -88,6 +89,22 @@ class LambdaToSql(ast.NodeVisitor):
 
     def parse_node(self, node):
         match type(node).__name__:
+            case 'Subscript':
+                caller = self.parse_node(node.value)
+                slice_node = self.parse_node(node.slice)
+                attr = slice_node.st if slice_node.eval is None else slice_node.eval
+                if caller.eval is None:
+                    if attr not in self.schema:
+                        raise AttributeError(f"invalid attribute for {caller.st}: '{node.attr}'")
+                    return NodeReturn(f'{caller.st}.{attr}', self.schema.get(attr))
+                if slice_node.eval is None:
+                    raise ValueError(f'invalid slice node: {slice_node.st}')
+                val = getattr(caller.eval, slice_node.eval)
+                if val is None:
+                    raise AttributeError(f"attribute not found: '{node.attr}'")
+                if type(val) == Callable:
+                    return NodeReturn(node.attr, Callable, val)
+                return self.evaluate_and_parse_node(node)
             case 'IfExp':
                 condition = self.parse_node(node.test)
                 condition_value = self.parse_node(node.body)
@@ -180,7 +197,7 @@ class LambdaToSql(ast.NodeVisitor):
                 )
             case 'Name':
                 if node.id == 'x':
-                    return NodeReturn('x', str)
+                    return NodeReturn(self.alias, str)
                 value = self.ctx_vars.get(node.id)
                 if value is not None:
                     transformed_value = node.id
@@ -232,8 +249,22 @@ class LambdaToSql(ast.NodeVisitor):
             raise SyntaxError("lambda definition should be -> 'lambda x:'")
         out = self.parse_node(self.root.body)
         return out
+    
+def get_context_from_lamba(lambda_func):
+    file = lambda_func.__code__.co_filename
+    line = lambda_func.__code__.co_firstlineno
+    found = None
+    for frame in inspect.stack():
+        if frame.filename == file and frame.lineno == line:
+            found = frame
+            break
+    if found is None:
+        raise ValueError('frame not found')
+    return found.frame.f_locals
 
-def lambda_to_sql(schema, lambda_func, data_transformer : DataTransformer, ctx_vars={}):
+import builtins
+def lambda_to_sql(schema, lambda_func, data_transformer : DataTransformer, ctx_vars={}, alias='x') -> str:
+    ctx_vars = get_context_from_lamba(lambda_func)
     lambda_node = lambda_to_ast(lambda_func)
-    out = LambdaToSql(lambda_node, schema, data_transformer=data_transformer, ctx_vars=ctx_vars).transform()
+    out = LambdaToSql(lambda_node, schema, data_transformer=data_transformer, ctx_vars=ctx_vars, alias=alias).transform()
     return out.st

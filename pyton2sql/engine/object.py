@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field, fields, _MISSING_TYPE
-from typing import List, get_origin, ClassVar, Literal, get_args, Any, Optional, TypeVar
+from typing import Callable, List, get_origin, ClassVar, Literal, get_args, Any, Optional, TypeVar
 import uuid
 from engine.db import DB_Connection
-from pypika import Table as PyPykaTable
+import polars as pl
+from engine.lambda_conversion import lambda_to_sql
+import builtins
 
 from json import JSONEncoder
 def _default(self, obj):
@@ -43,23 +45,68 @@ class Table:
 			raise ValueError("DB not defined")
 		self.__db = db
 		self.__db.ensure_table(self.table_name, self.schema)
-		self.__table_query = PyPykaTable(self.table_name)
+		self.__table_alias = "".join(self.table_name.split('.'))
 	
-	def get_all(self):
-		qry = self.db.query.from_(self.__table_query).select(*list(self.schema.keys())).limit(10)
+	def get_all(self, limit=10):
+		qry = self.db.query.select(
+			from_table=f'{self.table_name} {self.__table_alias}',
+			columns=[f'{self.__table_alias}.{i}' for i in list(self.schema.keys())],
+			where='TRUE',
+			limit=limit
+		)
+		return self.db.execute(qry)
+	
+	def filter(self, l_func, limit=10):
+		where_st = lambda_to_sql(self.schema, l_func, self.__db.data_transformer, alias=self.__table_alias)
+		qry = self.db.query.select(
+			from_table=f'{self.table_name} {self.__table_alias}',
+			columns=[f'{self.__table_alias}.{i}' for i in list(self.schema.keys())],
+			where=where_st,
+			limit=limit
+		)
 		return self.db.execute(qry)
 	
 	def insert(self, data : dict):
-		qry = self.db.query.into(self.__table_query).insert().columns(*data.keys()).insert(*data.values())
+		qry = self.db.query.insert(self.table_name, [data])
 		self.db.execute(qry)
 
 @dataclass(kw_only=True)
 class Object:
 	__table : ClassVar[Table] = None
+	identifier_field : ClassVar[str] = "id"
+	__objects_list : ClassVar[List] = []
+	__objects_map : ClassVar[dict] = {}
 
 	@classmethod
 	def set_db(cls, db : DB_Connection):
-		cls.__table = Table(cls.__name__.lower(), cls.get_types(), db)
+		schema = cls.get_types()
+		dependecies = {}
+		for k, i in schema.items():
+			if 'depends' in i:
+				table_name = f"{cls.__name__.lower()}__{k}__{i['depends'].__name__.lower()}"
+				dependecies[k] = {
+					'is_list': get_origin(i['type']) == list,
+					'type': i['depends'],
+					'table': Table(
+						table_name,
+						{
+							"connection_id": {
+								"type": primary_key
+							},
+							"first_id": {
+								"type": primary_key
+							},
+							"second_id": {
+								"type": primary_key
+							}
+						},
+						db
+					)
+				}
+		for i in dependecies:
+			del schema[i]
+		cls.__table = Table(cls.__name__.lower(), schema, db)
+		cls.__dependecies = dependecies
 
 	@classmethod
 	def get_types(cls):
@@ -75,18 +122,110 @@ class Object:
 				type_out["default"] = fields[i].default
 			if type(fields[i].default_factory) is not _MISSING_TYPE:
 				type_out["default_factory"] = fields[i].default_factory
+			
+			ar = fields[i].type
+			if get_origin(ar) == list:
+				ar = get_args(ar)[0]
+			if issubclass(ar, Object):
+				type_out["depends"] = ar
 			out[i] = type_out
 		return out
 	
 	@classmethod
+	def __update_individual(cls, data):
+		found = cls.__objects_map.get(data[cls.identifier_field])
+		if found is not None:
+			found.__dict__.update(data)
+			return found
+		obj = cls(**data)
+		cls.__objects_list.append(obj)
+		cls.__objects_map[obj[cls.identifier_field]] = obj
+		return obj
+	
+	@classmethod
+	def __update_info(cls, filter = None, limit=10):
+		if filter is None:
+			res = cls.__table.get_all()
+		else:
+			res = cls.__table.filter(filter, limit)
+		obj_lis = res.to_dicts()
+		id_list = res[cls.identifier_field].to_list()
+		
+		table_results = {}
+		dep_tables_required_ids = {}
+		for k, v in cls.__dependecies.items():
+			table_results[k] = v['table'].filter(lambda x: x.first_id in id_list)
+			ids = table_results[k]['second_id']
+			t_name = v['type'].__name__
+			if t_name not in dep_tables_required_ids:
+				dep_tables_required_ids[t_name] = {"type": v['type'], "ids": ids}
+			else:
+				dep_tables_required_ids[t_name] = dep_tables_required_ids[t_name]["ids"].list.set_union(ids)
+		
+		dep_tables = {}
+		for k, v in dep_tables_required_ids.items():
+			l = v['ids'].to_list()
+			id_field = v['type'].identifier_field
+			res = v['type'].filter(lambda x: x[id_field] in l)
+			dep_tables[k] = {}
+			for obj in res:
+				dep_tables[k][getattr(obj, v['type'].identifier_field)] = obj
+
+		out = []
+		for obj in obj_lis:
+			for key in cls.__dependecies:
+				df = table_results[key]
+				lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
+				t_name = cls.__dependecies[key]["type"].__name__
+				obj[key] = [dep_tables[t_name].get(row) for row in lis]
+			out.append(cls.__update_individual(obj))
+		return out
+
+	@classmethod
 	def new(cls, **kwargs):
 		out = cls(**kwargs)
-		cls.__table.insert(out.to_dict())
+		data = out.to_dict()
+		for i in cls.__dependecies:
+			del data[i]
+		cls.__table.insert(data)
+		for field, v in cls.__dependecies.items():
+			if v['is_list']:
+				new_rows = []
+				for i in getattr(out, field):
+					new_rows.append({
+						'connection_id': primary_key.generate(),
+						"first_id": out[cls.identifier_field],
+						"second_id": i[v['type'].identifier_field]
+					})
+				for j in new_rows:
+					v['table'].insert(j)
+			else:
+				v['table'].insert({
+					'connection_id': primary_key.generate(),
+					"first_id": out[cls.identifier_field],
+					"second_id": getattr(out, field)[v['type'].identifier_field]
+				})
+		return out
+	
+	def update(self, **kwargs):
+		for key, value in kwargs.items():
+			setattr(self, key, value)
+		## WIP modify table on update
+
+	@classmethod
+	def all(cls):
+		out = cls.__update_info()
 		return out
 	
 	@classmethod
-	def all(cls):
-		return cls.__table.get_all()
+	def filter(cls, lambda_f):
+		out = cls.__update_info(filter=lambda_f)
+		return out
+	
+	@classmethod
+	def get_by_id(cls, id_param):
+		cls.__update_info(lambda x: x[cls.identifier_field] == id_param, limit=1)
+		return cls.__objects_map.get(id_param)
 	
 	def to_dict(self):
 		out = {}
@@ -116,13 +255,27 @@ class Object:
 	
 	def to_json(self):
 		return self.to_dict()
-
+	
+	def __repr__(self):
+		schema = self.__class__.get_types()
+		out = self.__class__.__name__ + ' (\n'
+		for key in schema:
+			v = getattr(self, key)
+			r = repr(v)
+			if type(v) == list:
+				lis = ',\n'.join([f'   {repr(j).replace('\n', '\n   ')}' for j in v])
+				r = f'[\n{lis}\n]'
+			r = r.replace('\n', '\n   ')
+			out += f"   {key}:   {r}\n"
+		out += ')'
+		return out
   
 	def __getitem__(self, item):
 		return self.to_dict().get(item)
 
 T = TypeVar('T', bound=Object)
 def persistance(cls : type) -> T:
+	original_repr = cls.__repr__
 	out = dataclass(cls, kw_only=True)
 	if not issubclass(cls, Object):
 		raise ValueError(f"{cls.__name__} class should be subclass of 'Object'")
@@ -131,11 +284,12 @@ def persistance(cls : type) -> T:
 	if not has_one_primary_key:
 		raise ValueError("one primary key should be defined")
 	primary_key_field = list(schema.keys())[[i.type for i in schema.values()].index(primary_key)]
-	# schema[primary_key_field] = field(default_factory=lambda: primary_key.generate())
 	if isinstance(schema[primary_key_field].default_factory, _MISSING_TYPE):
 		schema[primary_key_field] = field(
 			default_factory=lambda: primary_key.generate()
 		)
+	out.identifier_field = primary_key_field
+	out.__repr__ = original_repr
 	out : Object = out
 	print("returning", out)
 	return out

@@ -5,10 +5,47 @@ from engine.db import DB_Connection
 from datetime import date, datetime
 from pypika import PostgreSQLQuery
 from engine.object import primary_key
+from typing import Callable, List, Optional
+from engine.query_builder import QueryBuilder
 
 CONNECTION_URL = "postgresql://my_user:password@localhost/my_db"
 CONNECTION_URL = "postgresql://postgres:password@localhost/my_db"
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+class PostgresQueryBuilder(QueryBuilder):
+    def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None) -> pl.DataFrame:
+        qry = "SELECT " + ", ".join(columns) + " FROM " + from_table
+        if where:
+            qry += " WHERE " + where
+        if order_by:
+            qry += " ORDER BY " + order_by
+        if limit:
+            qry += " LIMIT " + str(limit)
+        return qry
+
+    def insert(self, into_table: str, values: List[dict]) -> None:
+        qry = "INSERT INTO " + into_table + " (" + ", ".join(values[0].keys()) + ") VALUES "
+        qry += ", ".join([f"({', '.join([self._data_transformer.convert_data(v) for v in d.values()])})" for d in values])
+        return qry
+
+    def update(self, table: str, values: dict, where: str) -> None:
+        qry = f"UPDATE {table} SET {', '.join([f'{k} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
+        return qry
+
+    def delete(self, table: str, where: str) -> None:
+        qry = f"DELETE FROM {table} WHERE {where}"
+        return qry
+
+    def create_table(self, table_name: str, schema: dict, if_exists = False) -> None:
+        if_exists_st = "IF EXISTS" if if_exists else ""
+        items = [f'{k} {v}' for k, v in schema.items()]
+        qry = f"CREATE TABLE {if_exists_st} {table_name} ({', '.join(items)});"
+        return qry
+
+    def drop_table(self, table_name: str, if_exists = False) -> None:
+        if_exists_st = "IF EXISTS" if if_exists else ""
+        qry = f"DROP TABLE {if_exists_st} {table_name};"
+        return qry
 
 class PostgresDataTransformer(DataTransformer):
     TYPE_DICT= {
@@ -56,17 +93,26 @@ class PostgresDB(DB_Connection):
 
     def __init__(self):
         self.__db_connection = psycopg2.connect(CONNECTION_URL)
-        super().__init__(PostgresDataTransformer(), PostgreSQLQuery)
+        dt = PostgresDataTransformer()
+        super().__init__(dt, PostgresQueryBuilder(dt))
                 
     def execute(self, statement):
         statement = self.normalize_statment(statement)
-        super().execute(statement)
         with self.__db_connection.cursor() as cursor:
+            print()
+            print("$$$$$$ SQL STATEMENT $$$$$$")
+            print(statement)
             cursor.execute(statement)
-            self.__db_connection.commit()
             try:
                 rows = cursor.fetchall()
                 schema = [desc[0] for desc in cursor.description]
-                return pl.DataFrame(rows, schema=schema, orient='row')
+                out = pl.DataFrame(rows, schema=schema, orient='row')
+                print()
+                print(out)
+                return out
             except:
                 return None
+            finally:
+                self.__db_connection.commit()
+                print("$$$$$$$$$$$$$")
+                print()
