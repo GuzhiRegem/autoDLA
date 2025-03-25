@@ -1,36 +1,61 @@
-from dataclasses import dataclass, fields
-from typing import List
-from engine.Object import Object
-from engine.Engine import Engine
+from dbs.postgresdb import PostgresDB
+from datetime import datetime, timedelta, date
+import os
+from engine.utils.data_generation import DataGenerator
+from engine.object import Object, persistance, primary_key
 
-@dataclass(kw_only=True)
+def title(text):
+    print(f'\n{"-"*20}{text}{"-"*20}\n')
+
+title("DEFINING CLASSES")
+@persistance
 class User(Object):
-    name : str
-    age : int
+    id: primary_key = primary_key.auto_increment()
+    name: str
+    age: int
+    mass: float
+    created_at: datetime
 
-@dataclass(kw_only=True)
+@persistance
 class Group(Object):
-    name : str
-    users : List[User]
-    numbers : List[int]
+    id: primary_key = primary_key.auto_increment()
+    name: str
+    participants: list[User]
 
-engine = Engine(classes=[User, Group])
-res = User.all()
-print(res)
+db = PostgresDB()
+db.attach([Group, User])
 
-# engine.attach(User)
-# engine.attach(Group)
+print('USER')
+for k, v in User.get_types().items():
+    print(f'{k}:\t{v}')
+print()
 
-# #Ensure that a user named jhon(18) is in the database and that a group named "jhon_family" has jhon as a member
-# jhon = User.get_by(name = "jhon", age = 18, can_be_none = True)
-# if jhon is None:
-#     jhon = User(name = "jhon", age = 18)
-# grp = Group.get_by(name = "jhon_family", can_be_none = True)
-# if grp is None:
-#     grp = Group(name = "jhon_family", users = [jhon])
-# grp.edit(name="jhon_family_2")
-
-# h = grp.get_history()
-# print(h)
+print('GROUP')
+for k, v in Group.get_types().items():
+    print(f'{k}:\t{v}')
+print()
 
 
+
+
+# TEST
+title('CREATE USERS')
+for i in range(2):
+    data = {
+        'name': DataGenerator.name(),
+        'age': DataGenerator.age(),
+        'mass': DataGenerator.mass(),
+        'created_at': DataGenerator.created_at()
+    }
+    n = User.new(**data)
+title('ALL USERS')
+a = User.all()
+for i in a:
+    print(i, id(i))
+u1 = a[0]
+title('CREATE GROUP')
+g = Group.new(name='Group 1', participants=a)
+print(g)
+
+u1.update(age=u1.age + 1)
+print(g)
