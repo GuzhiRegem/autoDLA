@@ -3,7 +3,6 @@ import polars as pl
 from engine.data_conversion import DataTransformer, DataConversion
 from engine.db import DB_Connection
 from datetime import date, datetime
-from pypika import PostgreSQLQuery
 from engine.object import primary_key
 from typing import Callable, List, Optional
 from engine.query_builder import QueryBuilder

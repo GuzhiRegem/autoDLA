@@ -4,7 +4,6 @@ import uuid
 from engine.db import DB_Connection
 import polars as pl
 from engine.lambda_conversion import lambda_to_sql
-import builtins
 
 from json import JSONEncoder
 def _default(self, obj):
