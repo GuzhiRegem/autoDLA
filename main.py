@@ -55,7 +55,13 @@ for i in a:
 u1 = a[0]
 title('CREATE GROUP')
 g = Group.new(name='Group 1', participants=a)
-print(g)
-
-u1.update(age=u1.age + 1)
-print(g)
+print(g, id(g))
+title("GET GROUP")
+g2 = Group.get_by_id(g.id)
+print(g2, id(g2))
+title("UPDATE")
+g.update(participants=g.participants[:-1], name="Group 1.1")
+print(g, id(g))
+title("GET GROUP 2")
+g2 = Group.get_by_id(g.id)
+print(g2, id(g2))

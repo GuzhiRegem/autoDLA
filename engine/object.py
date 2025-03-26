@@ -97,6 +97,9 @@ class Object:
 							},
 							"second_id": {
 								"type": primary_key
+							},
+							"list_index": {
+								"type": int
 							}
 						},
 						db
@@ -177,6 +180,8 @@ class Object:
 				lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
 				t_name = cls.__dependecies[key]["type"].__name__
 				obj[key] = [dep_tables[t_name].get(row) for row in lis]
+				if not cls.__dependecies[key]['is_list']:
+					obj[key] = obj[key][0]
 			out.append(cls.__update_individual(obj))
 		return out
 
@@ -190,11 +195,12 @@ class Object:
 		for field, v in cls.__dependecies.items():
 			if v['is_list']:
 				new_rows = []
-				for i in getattr(out, field):
+				for idx, i in enumerate(getattr(out, field)):
 					new_rows.append({
 						'connection_id': primary_key.generate(),
 						"first_id": out[cls.identifier_field],
-						"second_id": i[v['type'].identifier_field]
+						"second_id": i[v['type'].identifier_field],
+						"list_index": idx
 					})
 				for j in new_rows:
 					v['table'].insert(j)
@@ -202,14 +208,18 @@ class Object:
 				v['table'].insert({
 					'connection_id': primary_key.generate(),
 					"first_id": out[cls.identifier_field],
-					"second_id": getattr(out, field)[v['type'].identifier_field]
+					"second_id": getattr(out, field)[v['type'].identifier_field],
+					"list_index": 0
 				})
+		cls.__objects_map[out[cls.identifier_field]] = out
+		cls.__objects_list.append(out)
 		return out
 	
 	def update(self, **kwargs):
 		for key, value in kwargs.items():
+			if key in self.__dependecies:
+				dependency = self.__dependecies[key]
 			setattr(self, key, value)
-		## WIP modify table on update
 
 	@classmethod
 	def all(cls):
@@ -230,8 +240,7 @@ class Object:
 		out = {}
 		fields = { k: v["type"] for k, v in self.__class__.get_types().items() }
 		for i in fields:
-			if i == '_Object__objects':
-				continue
+			val = getattr(self, i)
 			tpe = fields[i]
 			ar = None
 			if (type(tpe) != type):
@@ -240,16 +249,16 @@ class Object:
 			if (tpe == list):
 				lis = []
 				if issubclass(ar, Object):
-					for j in getattr(self, i):
+					for j in val:
 						lis.append(j.to_dict())
 				else:
 					lis.append(j)
 				out[i] = lis
 			else:
 				if issubclass(tpe, Object):
-					out[i] = getattr(self, i).to_dict()
+					out[i] = val.to_dict()
 				else:
-					out[i] = getattr(self, i)
+					out[i] = val
 		return out
 	
 	def to_json(self):
@@ -290,5 +299,4 @@ def persistance(cls : type) -> T:
 	out.identifier_field = primary_key_field
 	out.__repr__ = original_repr
 	out : Object = out
-	print("returning", out)
 	return out
