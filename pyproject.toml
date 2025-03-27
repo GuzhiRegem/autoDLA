@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "your-orm-module"
+version = "0.1.0"
+description = "A simple ORM with history tracking"
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg2",
+    "polars"
+]
