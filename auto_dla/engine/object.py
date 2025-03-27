@@ -279,11 +279,6 @@ class Object:
 					"list_index": 0,
 					**dla_data()
 				})
-		print("}}}}}}}}}}}}}}}}}}}}}}}}}}")
-		print(cls.identifier_field)
-		print(out)
-		print(cls.__objects_map)
-		print("}}}}}}}}}}}}}}}}}}}}}}}}}}")
 		cls.__objects_map[str(out[cls.identifier_field])] = out
 		cls.__objects_list.append(out)
 		return out
@@ -300,7 +295,6 @@ class Object:
 		return out
 	
 	def update(self, **kwargs):
-		cls = self.__class__
 		data = {**self.to_dict(), **kwargs}
 		dla_data_insert = dla_dict("UPDATE", is_current=True)
 		for key, value in kwargs.items():
@@ -308,29 +302,61 @@ class Object:
 				del data[key]
 				dependency = self.__dependecies[key]
 				dependency['table'].update(lambda x: x.first_id == self.id, {'DLA_is_current': False})
+				new_rows = []
 				if dependency['is_list']:
-					new_rows = []
 					for idx, i in enumerate(value):
 						new_rows.append({
 							'connection_id': primary_key.generate(),
-							"first_id": self[cls.identifier_field],
+							"first_id": self[self.identifier_field],
 							"second_id": i[dependency['type'].identifier_field],
 							"list_index": idx,
 							**dla_data_insert()
 						})
-					for j in new_rows:
-						dependency['table'].insert(j)
 				else:
-					dependency['table'].insert({
+					new_rows.append({
 						'connection_id': primary_key.generate(),
-						"first_id": self[cls.identifier_field],
+						"first_id": self[self.identifier_field],
 						"second_id": value[dependency['type'].identifier_field],
 						"list_index": 0,
 						**dla_data_insert()
 					})
+				for j in new_rows:
+					dependency['table'].insert(j)
 			setattr(self, key, value)
-		self.__table.update(lambda x: x[cls.identifier_field] == self.id, {'DLA_is_current': False})
+		self.__table.update(lambda x: x[self.identifier_field] == self.id, {'DLA_is_current': False})
 		self.__table.insert({**data, **dla_data_insert()})
+	
+	def delete(self):
+		data = {**self.to_dict()}
+		dla_data_delete = dla_dict("DELETE", is_current=True, is_active=False)
+		for key, dependency in self.__dependecies.items():
+			del data[key]
+			dependency['table'].update(lambda x: x.first_id == self.id, {'DLA_is_current': False})
+			value = getattr(self, key)
+			new_rows = []
+			if dependency['is_list']:
+				for idx, i in enumerate(value):
+					new_rows.append({
+						'connection_id': primary_key.generate(),
+						"first_id": self[self.identifier_field],
+						"second_id": i[dependency['type'].identifier_field],
+						"list_index": idx,
+						**dla_data_delete()
+					})
+			else:
+				new_rows.append({
+					'connection_id': primary_key.generate(),
+					"first_id": self[self.identifier_field],
+					"second_id": value[dependency['type'].identifier_field],
+					"list_index": 0,
+					**dla_data_delete()
+				})
+			for j in new_rows:
+				dependency['table'].insert(j)
+		self.__table.update(lambda x: x[self.identifier_field] == self.id, {'DLA_is_current': False})
+		self.__table.insert({**data, **dla_data_delete()})
+
+
 
 	@classmethod
 	def all(cls, limit=10):

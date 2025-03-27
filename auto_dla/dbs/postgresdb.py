@@ -47,7 +47,7 @@ class PostgresQueryBuilder(QueryBuilder):
         return qry
 
     def update(self, table: str, values: dict, where: str) -> None:
-        qry = f"UPDATE {table} SET {', '.join([f'{k} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
+        qry = f"UPDATE {table} SET {', '.join([f'{k.upper()} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
         return qry
 
     def delete(self, table: str, where: str) -> None:
