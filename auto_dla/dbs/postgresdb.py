@@ -12,7 +12,7 @@ import os
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
     DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
-POSTGRES_USER = 'my_user'
+POSTGRES_USER = 'postgres'
 if "AUTODLA_POSTGRES_USER" in os.environ:
     POSTGRES_USER = os.environ.get("AUTODLA_POSTGRES_USER")
 POSTGRES_PASSWORD = 'password'
