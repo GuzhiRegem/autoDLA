@@ -19,6 +19,9 @@ class DB_Connection:
     def data_transformer(self):
         return self.__data_transformer
     
+    def get_table_definition(self, table_name) -> dict[str, type]:
+        pass
+    
     def attach(self, objects):
         ordered_objects = []
         pending = objects[:]
@@ -49,9 +52,16 @@ class DB_Connection:
         if statement[-1] != ";":
             statement += ";"
         return statement
-
+    
     def ensure_table(self, table_name, schema):
-        data_schema = {k: v["type"] for k, v in schema.items()}
+        data_schema = {k.upper(): v["type"] for k, v in schema.items()}
+        current_data_schema = self.get_table_definition(table_name)
+        if all([self.data_transformer.check_type_compatibilty(data_schema.get(k), current_data_schema.get(k)) for k in list(set(data_schema.keys()).union(set(data_schema.keys())))]):
+            return
+        print(data_schema)
+        print(current_data_schema)
+        if data_schema == current_data_schema:
+            return
         schema = self.data_transformer.convert_data_schema(data_schema)
         self.execute(self.query.drop_table(table_name, if_exists=True))
         qry = self.query.create_table(table_name, schema)

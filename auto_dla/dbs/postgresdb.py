@@ -107,6 +107,10 @@ class PostgresDataTransformer(DataTransformer):
             "Not": 'NOT'
         }
     }
+    NODE_COMPATIBILITY = {
+        primary_key: UUID,
+        UUID: primary_key
+    }
 
 class PostgresDB(DB_Connection):
 
@@ -114,6 +118,26 @@ class PostgresDB(DB_Connection):
         self.__db_connection = psycopg2.connect(connection_url)
         dt = PostgresDataTransformer()
         super().__init__(dt, PostgresQueryBuilder(dt))
+    
+    def get_table_definition(self, table_name) -> dict[str, type]:
+        if "." in table_name:
+            table_name = table_name.split(".")[-1]
+        res = self.execute(self.query.select(
+            from_table='INFORMATION_SCHEMA.COLUMNS',
+            columns=["column_name", "data_type"],
+            limit=None,
+            where=f"table_name = '{table_name}'"
+        )).to_dicts()
+        conversion_dict = {
+            "boolean": "bool",
+            "timestamp without time zone": "timestamp"
+        }
+        out = {}
+        for row in res:
+            if row['data_type'] in conversion_dict:
+                row['data_type'] = conversion_dict[row['data_type']]
+            out[row['column_name'].upper()] = self.data_transformer.get_type_from_sql_type(row["data_type"])
+        return out
                 
     def execute(self, statement, commit=True):
         statement = self.normalize_statment(statement)

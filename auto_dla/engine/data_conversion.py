@@ -124,6 +124,26 @@ class DataTransformer:
         }
     }
 
+    NODE_COMPATIBILITY = {}
+
+    @classmethod
+    def check_type_compatibilty(cls, tp1, tp2):
+        out = tp1 == tp2
+        if not out:
+            if tp1 in cls.NODE_COMPATIBILITY:
+                out = cls.NODE_COMPATIBILITY[tp1] == tp2
+        return out
+
+    @classmethod
+    def get_type_from_sql_type(cls, sql_type) -> type:
+        found = None
+        for k, v in cls.TYPE_DICT.items():
+            if v.name.upper() == sql_type.upper():
+                found = k
+        if found is None:
+            raise TypeError(f"invalid conversion for sql_type '{sql_type}'")
+        return found
+
     @classmethod
     def get_method(cls, caller_type : type, method_name : str):
         d = cls.METHODS_MAP["global"]

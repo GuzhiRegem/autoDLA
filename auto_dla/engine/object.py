@@ -25,6 +25,12 @@ class primary_key(str):
 	@staticmethod
 	def auto_increment():
 		return field(default_factory=lambda: primary_key.generate())
+	
+	def __eq__(self, value):
+		if isinstance(value, str):
+			return super().__eq__(value)
+		if isinstance(value, uuid.UUID):
+			return uuid.UUID(self) == value
 
 def dla_dict(operation : Literal["INSERT", "UPDATE", "DELETE"], modified_at=datetime.now(), modified_by="SYSTEM", is_current=False, is_active=True):
 	def out():
@@ -189,7 +195,11 @@ class Object:
 		return out
 	
 	@classmethod
-	def __update_individual(cls, data):
+	def __update_individual(cls, data_inp):
+		data = {}
+		for k, v in data_inp.items():
+			if not k.upper().startswith("DLA_"):
+				data[k] = v
 		found = cls.__objects_map.get(data[cls.identifier_field])
 		if found is not None:
 			found.__dict__.update(data)
@@ -269,7 +279,12 @@ class Object:
 					"list_index": 0,
 					**dla_data()
 				})
-		cls.__objects_map[out[cls.identifier_field]] = out
+		print("}}}}}}}}}}}}}}}}}}}}}}}}}}")
+		print(cls.identifier_field)
+		print(out)
+		print(cls.__objects_map)
+		print("}}}}}}}}}}}}}}}}}}}}}}}}}}")
+		cls.__objects_map[str(out[cls.identifier_field])] = out
 		cls.__objects_list.append(out)
 		return out
 	
