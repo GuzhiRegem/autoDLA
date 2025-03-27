@@ -21,4 +21,4 @@ for user in users:
     print(user)
 
 # Filter users
-adults = User.filter(lambda u: u.age >= 18)
+adults = User.filter(lambda x: x.age >= 18)
