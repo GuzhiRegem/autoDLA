@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field, fields, _MISSING_TYPE
 from datetime import datetime
-from typing import Callable, List, get_origin, ClassVar, Literal, get_args, Any, Optional, TypeVar
+from typing import List, get_origin, ClassVar, Literal, get_args, TypeVar
 import uuid
-from engine.db import DB_Connection
 import polars as pl
-from engine.lambda_conversion import lambda_to_sql
+from ..engine.db import DB_Connection
+from ..engine.lambda_conversion import lambda_to_sql
 
 from json import JSONEncoder
 def _default(self, obj):
@@ -333,7 +333,7 @@ class Object:
 		return cls.__objects_map.get(id_param)
 	
 	@classmethod
-	def get_table_res(cls, limit=10, only_current=True, only_active=True):
+	def get_table_res(cls, limit=10, only_current=True, only_active=True) -> pl.DataFrame:
 		return cls.__table.get_all(limit=limit, only_current=only_current, only_active=only_active)
 	
 	def to_dict(self):

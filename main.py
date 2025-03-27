@@ -1,8 +1,7 @@
-from dbs.postgresdb import PostgresDB
-from datetime import datetime, timedelta, date
-import os
-from engine.utils.data_generation import DataGenerator
-from engine.object import Object, persistance, primary_key
+from auto_dla import Object, persistance, primary_key
+from auto_dla.dbs import PostgresDB
+from auto_dla.utils import DataGenerator
+from datetime import datetime
 
 def title(text):
     print(f'\n{"-"*20}{text}{"-"*20}\n')

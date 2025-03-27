@@ -1,7 +1,6 @@
 import polars as pl
-from typing import Dict, List, Tuple, Any, Optional, Union, Callable, ClassVar
-from engine.data_conversion import DataTransformer
-from engine.query_builder import QueryBuilder
+from ..engine.data_conversion import DataTransformer
+from ..engine.query_builder import QueryBuilder
 
 class DB_Connection:
     __data_transformer : DataTransformer

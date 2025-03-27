@@ -1,11 +1,11 @@
 import psycopg2
 import polars as pl
-from engine.data_conversion import DataTransformer, DataConversion
-from engine.db import DB_Connection
+from ..engine.data_conversion import DataTransformer, DataConversion
+from ..engine.db import DB_Connection
+from ..engine.object import primary_key
+from ..engine.query_builder import QueryBuilder
 from datetime import date, datetime
-from engine.object import primary_key
-from typing import Callable, List, Optional
-from engine.query_builder import QueryBuilder
+from typing import List
 from uuid import UUID
 
 CONNECTION_URL = "postgresql://my_user:password@localhost/my_db"
