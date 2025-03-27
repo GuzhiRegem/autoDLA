@@ -7,12 +7,28 @@ from ..engine.query_builder import QueryBuilder
 from datetime import date, datetime
 from typing import List
 from uuid import UUID
+import os
 
-CONNECTION_URL = "postgresql://my_user:password@localhost/my_db"
-CONNECTION_URL = "postgresql://postgres:password@localhost/my_db"
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-
+if "DATETIME_FORMAT" in os.environ:
+    DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
+POSTGRES_USER = 'my_user'
+if "AUTODLA_POSTGRES_USER" in os.environ:
+    POSTGRES_USER = os.environ.get("AUTODLA_POSTGRES_USER")
+POSTGRES_PASSWORD = 'password'
+if "AUTODLA_POSTGRES_PASSWORD" in os.environ:
+    POSTGRES_PASSWORD = os.environ.get("AUTODLA_POSTGRES_PASSWORD")
+POSTGRES_URL = 'localhost'
+if "AUTODLA_POSTGRES_URL" in os.environ:
+    POSTGRES_URL = os.environ.get("AUTODLA_POSTGRES_URL")
+POSTGRES_DB = 'my_db'
+if "AUTODLA_POSTGRES_DB" in os.environ:
+    POSTGRES_DB = os.environ.get("AUTODLA_POSTGRES_DB")
 VERBOSE = True
+if "AUTODLA_SQL_VERBOSE" in os.environ:
+    VERBOSE = os.environ.get("AUTODLA_SQL_VERBOSE")
+
+CONNECTION_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_URL}/{POSTGRES_DB}"
 
 class PostgresQueryBuilder(QueryBuilder):
     def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None) -> pl.DataFrame:
@@ -94,8 +110,8 @@ class PostgresDataTransformer(DataTransformer):
 
 class PostgresDB(DB_Connection):
 
-    def __init__(self):
-        self.__db_connection = psycopg2.connect(CONNECTION_URL)
+    def __init__(self, connection_url=CONNECTION_URL):
+        self.__db_connection = psycopg2.connect(connection_url)
         dt = PostgresDataTransformer()
         super().__init__(dt, PostgresQueryBuilder(dt))
                 
