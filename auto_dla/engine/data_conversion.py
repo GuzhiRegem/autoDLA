@@ -1,8 +1,11 @@
 from datetime import datetime, date
 from dataclasses import dataclass
 from typing import Callable, Any, Literal
+import os
 
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+if "DATETIME_FORMAT" in os.environ:
+    DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
 
 @dataclass
 class DataConversion:
