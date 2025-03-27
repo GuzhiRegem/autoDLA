@@ -200,9 +200,10 @@ class LambdaToSql(ast.NodeVisitor):
                     return NodeReturn(self.alias, str)
                 value = self.ctx_vars.get(node.id)
                 if value is not None:
-                    transformed_value = node.id
-                    if not isinstance(value, Callable):
+                    try:
                         transformed_value = self.data_transformer.convert_data(value)
+                    except:
+                        transformed_value = node.id
                     return NodeReturn(transformed_value, type(value), value)
                 raise ValueError(f"'{node.id}' is not defined")
             case 'Constant':
@@ -235,8 +236,13 @@ class LambdaToSql(ast.NodeVisitor):
                     return NodeReturn(node.attr, Callable, val)
                 return self.evaluate_and_parse_node(node)
             case _:
-                print(ast.dump(node))
-                raise ValueError(f'Invalid node type: {type(node).__name__}')
+                try:
+                    evaluation = self.evaluate_node(node)
+                    new_node=ast.Constant(value=evaluation)
+                    return self.parse_node(new_node)
+                except:
+                    print(ast.dump(node))
+                    raise ValueError(f'Invalid node type: {type(node).__name__}')
 
 
     def transform(self):
@@ -249,7 +255,8 @@ class LambdaToSql(ast.NodeVisitor):
             raise SyntaxError("lambda definition should be -> 'lambda x:'")
         out = self.parse_node(self.root.body)
         return out
-    
+
+import builtins
 def get_context_from_lamba(lambda_func):
     file = lambda_func.__code__.co_filename
     line = lambda_func.__code__.co_firstlineno
@@ -260,9 +267,8 @@ def get_context_from_lamba(lambda_func):
             break
     if found is None:
         raise ValueError('frame not found')
-    return found.frame.f_locals
+    return {**vars(builtins), **found.frame.f_locals}
 
-import builtins
 def lambda_to_sql(schema, lambda_func, data_transformer : DataTransformer, ctx_vars={}, alias='x') -> str:
     ctx_vars = get_context_from_lamba(lambda_func)
     lambda_node = lambda_to_ast(lambda_func)

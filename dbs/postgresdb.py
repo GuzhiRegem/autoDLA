@@ -6,10 +6,13 @@ from datetime import date, datetime
 from engine.object import primary_key
 from typing import Callable, List, Optional
 from engine.query_builder import QueryBuilder
+from uuid import UUID
 
 CONNECTION_URL = "postgresql://my_user:password@localhost/my_db"
 CONNECTION_URL = "postgresql://postgres:password@localhost/my_db"
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+VERBOSE = True
 
 class PostgresQueryBuilder(QueryBuilder):
     def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None) -> pl.DataFrame:
@@ -48,6 +51,7 @@ class PostgresQueryBuilder(QueryBuilder):
 
 class PostgresDataTransformer(DataTransformer):
     TYPE_DICT= {
+        UUID: DataConversion("UUID", lambda x: f"'{x}'"),
         primary_key: DataConversion("UUID", lambda x: f"'{x}'"),
         type(None): DataConversion('', lambda x: "NULL"),
         int: DataConversion('INTEGER'),
@@ -95,23 +99,27 @@ class PostgresDB(DB_Connection):
         dt = PostgresDataTransformer()
         super().__init__(dt, PostgresQueryBuilder(dt))
                 
-    def execute(self, statement):
+    def execute(self, statement, commit=True):
         statement = self.normalize_statment(statement)
         with self.__db_connection.cursor() as cursor:
-            print()
-            print("$$$$$$ SQL STATEMENT $$$$$$")
-            print(statement)
+            if VERBOSE:
+                print()
+                print("$$$$$$ SQL STATEMENT $$$$$$")
+                print(statement)
             cursor.execute(statement)
             try:
                 rows = cursor.fetchall()
                 schema = [desc[0] for desc in cursor.description]
                 out = pl.DataFrame(rows, schema=schema, orient='row')
-                print()
-                print(out)
+                if VERBOSE:
+                    print()
+                    print(out)
                 return out
             except:
                 return None
             finally:
-                self.__db_connection.commit()
-                print("$$$$$$$$$$$$$")
-                print()
+                if commit:
+                    self.__db_connection.commit()
+                if VERBOSE:
+                    print("$$$$$$$$$$$$$")
+                    print()
