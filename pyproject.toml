@@ -3,7 +3,7 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "auto_dla"
+name = "autoDLA"
 version = "0.0.1"
 description = "A simple ORM with history tracking for rapid POC development"
 readme = "README.md"
@@ -39,4 +39,4 @@ fastapi = [
 ]
 
 [tool.setuptools]
-packages = ["auto_dla"]
+packages = ["autodla"]
