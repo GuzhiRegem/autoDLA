@@ -1,6 +1,6 @@
-from auto_dla import Object, persistance, primary_key
-from auto_dla.dbs import PostgresDB
-from auto_dla.utils import DataGenerator
+from autodla import Object, persistance, primary_key
+from autodla.dbs import PostgresDB
+from autodla.utils import DataGenerator
 
 @persistance
 class User(Object):
