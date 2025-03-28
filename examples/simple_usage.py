@@ -1,5 +1,5 @@
-from auto_dla import Object, persistance, primary_key
-from auto_dla.dbs import PostgresDB
+from autodla import Object, persistance, primary_key
+from autodla.dbs import PostgresDB
 
 @persistance
 class User(Object):
