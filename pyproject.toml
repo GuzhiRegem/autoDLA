@@ -4,10 +4,36 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auto_dla"
-version = "0.1.0"
-description = "A simple ORM with history tracking"
-requires-python = ">=3.12"
+version = "0.0.1"
+description = "A simple ORM with history tracking for rapid POC development"
+readme = "README.md"
+authors = [{name = "GuzhiRegem", email = "sebastian.moreiradl@gmail.com"}]
+license = "MIT"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Database :: Front-Ends",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["orm", "database", "sql", "postgresql", "prototype", "poc", "history-tracking"]
 dependencies = [
-    "psycopg2",
-    "polars"
+    "polars>=0.19.0",
+    "typing-extensions>=4.0.0",
+]
+requires-python = ">=3.9"
+
+[project.urls]
+"Homepage" = "https://github.com/GuzhiRegem/autoDLA"
+"Bug Tracker" = "https://github.com/GuzhiRegem/autoDLA/issues"
+"Documentation" = "https://github.com/GuzhiRegem/autoDLA#readme"
+
+[project.optional-dependencies]
+db-postgres = [
+    "psycopg2-binary>=2.9.3"
+]
+fastapi = [
+    "fastapi>=0.68.0",
+    "uvicorn>=0.15.0",
 ]
