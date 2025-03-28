@@ -1,1 +1,2 @@
-# autoDLA
+# AutoDLA
+Data persistance made easy
