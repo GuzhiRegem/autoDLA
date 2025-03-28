@@ -1,3 +1,5 @@
+import os
+os.environ['AUTODLA_SQL_VERBOSE'] = True
 from autodla import Object, persistance, primary_key
 from autodla.dbs import PostgresDB
 from autodla.utils import DataGenerator

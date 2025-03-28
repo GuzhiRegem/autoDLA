@@ -24,7 +24,7 @@ if "AUTODLA_POSTGRES_URL" in os.environ:
 POSTGRES_DB = 'my_db'
 if "AUTODLA_POSTGRES_DB" in os.environ:
     POSTGRES_DB = os.environ.get("AUTODLA_POSTGRES_DB")
-VERBOSE = True
+VERBOSE = False
 if "AUTODLA_SQL_VERBOSE" in os.environ:
     VERBOSE = os.environ.get("AUTODLA_SQL_VERBOSE")
 
