@@ -1,10 +1,14 @@
-from dataclasses import dataclass, field, fields, _MISSING_TYPE
+from dataclasses import field, _MISSING_TYPE
 from datetime import datetime
-from typing import List, get_origin, ClassVar, Literal, get_args, TypeVar
+from typing import List, get_origin, ClassVar, Literal, get_args, TypeVar, Any
 import uuid
 import polars as pl
 from ..engine.db import DB_Connection
 from ..engine.lambda_conversion import lambda_to_sql
+from pydantic import BaseModel, GetCoreSchemaHandler, TypeAdapter
+from pydantic_core import CoreSchema, core_schema, PydanticUndefinedType
+import warnings
+warnings.filterwarnings('error')
 
 from json import JSONEncoder
 def _default(self, obj):
@@ -31,6 +35,13 @@ class primary_key(str):
 			return super().__eq__(value)
 		if isinstance(value, uuid.UUID):
 			return uuid.UUID(self) == value
+	
+	@classmethod
+	def __get_pydantic_core_schema__(cls, source_type: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+		return core_schema.no_info_after_validator_function(cls, handler(str))
+
+	def __hash__(self):
+		return super().__hash__()
 
 def dla_dict(operation : Literal["INSERT", "UPDATE", "DELETE"], modified_at=datetime.now(), modified_by="SYSTEM", is_current=False, is_active=True):
 	def out():
@@ -109,9 +120,9 @@ class Table:
 		)
 		return self.db.execute(qry)
 
-@dataclass(kw_only=True)
-class Object:
+class Object(BaseModel):
 	__table : ClassVar[Table] = None
+	__dependecies : ClassVar[list] = []
 	identifier_field : ClassVar[str] = "id"
 	__objects_list : ClassVar[List] = []
 	__objects_map : ClassVar[dict] = {}
@@ -174,19 +185,18 @@ class Object:
 	@classmethod
 	def get_types(cls):
 		out = {}
-		fields = cls.__dict__["__dataclass_fields__"]
+		fields = cls.model_fields
 		for i in fields:
-			if(get_origin(fields[i].type) == ClassVar):
+			if(get_origin(fields[i].annotation) == ClassVar):
 				continue
 			type_out = {
-				"type": fields[i].type
+				"type": fields[i].annotation
 			}
-			if type(fields[i].default) is not _MISSING_TYPE:
+			if type(fields[i].default) not in [_MISSING_TYPE, PydanticUndefinedType]:
 				type_out["default"] = fields[i].default
-			if type(fields[i].default_factory) is not _MISSING_TYPE:
+			if type(fields[i].default_factory) not in [_MISSING_TYPE, PydanticUndefinedType]:
 				type_out["default_factory"] = fields[i].default_factory
-			
-			ar = fields[i].type
+			ar = fields[i].annotation
 			if get_origin(ar) == list:
 				ar = get_args(ar)[0]
 			if issubclass(ar, Object):
@@ -201,6 +211,10 @@ class Object:
 			if not k.upper().startswith("DLA_"):
 				data[k] = v
 		found = cls.__objects_map.get(data[cls.identifier_field])
+		try:
+			cls.model_validate(data)
+		except:
+			return None
 		if found is not None:
 			found.__dict__.update(data)
 			return found
@@ -247,11 +261,15 @@ class Object:
 				obj[key] = [dep_tables[t_name].get(row) for row in lis]
 				if not cls.__dependecies[key]['is_list']:
 					obj[key] = obj[key][0]
-			out.append(cls.__update_individual(obj))
+			updt = cls.__update_individual(obj)
+			if updt is not None:
+				out.append(updt)
 		return out
 
 	@classmethod
 	def new(cls, **kwargs):
+		if cls.__table is None:
+			raise ImportError('DB not defined')
 		out = cls(**kwargs)
 		data = out.to_dict()
 		for i in cls.__dependecies:
@@ -378,66 +396,10 @@ class Object:
 		return cls.__table.get_all(limit=limit, only_current=only_current, only_active=only_active)
 	
 	def to_dict(self):
-		out = {}
-		fields = { k: v["type"] for k, v in self.__class__.get_types().items() }
-		for i in fields:
-			val = getattr(self, i)
-			tpe = fields[i]
-			ar = None
-			if (type(tpe) != type):
-				ar = get_args(tpe)[0]
-				tpe = get_origin(tpe)
-			if (tpe == list):
-				lis = []
-				if issubclass(ar, Object):
-					for j in val:
-						lis.append(j.to_dict())
-				else:
-					lis.append(j)
-				out[i] = lis
-			else:
-				if issubclass(tpe, Object):
-					out[i] = val.to_dict()
-				else:
-					out[i] = val
-		return out
+		return self.model_dump()
 	
 	def to_json(self):
-		return self.to_dict()
-	
-	def __repr__(self):
-		schema = self.__class__.get_types()
-		out = self.__class__.__name__ + ' (\n'
-		for key in schema:
-			v = getattr(self, key)
-			r = repr(v)
-			if type(v) == list:
-				lis = ',\n'.join([f'   {repr(j).replace('\n', '\n   ')}' for j in v])
-				r = f'[\n{lis}\n]'
-			r = r.replace('\n', '\n   ')
-			out += f"   {key}:   {r}\n"
-		out += ')'
-		return out
+		return self.model_dump_json()
   
 	def __getitem__(self, item):
 		return self.to_dict().get(item)
-
-T = TypeVar('T', bound=Object)
-def persistance(cls : type) -> T:
-	original_repr = cls.__repr__
-	out = dataclass(cls, kw_only=True)
-	if not issubclass(cls, Object):
-		raise ValueError(f"{cls.__name__} class should be subclass of 'Object'")
-	schema = out.__dataclass_fields__
-	has_one_primary_key = [i.type == primary_key for i in schema.values()].count(True) == 1
-	if not has_one_primary_key:
-		raise ValueError("one primary key should be defined")
-	primary_key_field = list(schema.keys())[[i.type for i in schema.values()].index(primary_key)]
-	if isinstance(schema[primary_key_field].default_factory, _MISSING_TYPE):
-		schema[primary_key_field] = field(
-			default_factory=lambda: primary_key.generate()
-		)
-	out.identifier_field = primary_key_field
-	out.__repr__ = original_repr
-	out : Object = out
-	return out

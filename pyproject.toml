@@ -21,6 +21,7 @@ keywords = ["orm", "database", "sql", "postgresql", "prototype", "poc", "history
 dependencies = [
     "polars>=0.19.0",
     "typing-extensions>=4.0.0",
+    "pydantic"
 ]
 requires-python = ">=3.9"
 

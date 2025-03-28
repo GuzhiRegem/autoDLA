@@ -1,9 +1,12 @@
 import os
-os.environ['AUTODLA_SQL_VERBOSE'] = True
-from autodla import Object, persistance, primary_key
+os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
+from autodla import Object, primary_key
 from autodla.dbs import PostgresDB
 
-@persistance
+
+
+
+
 class User(Object):
     id: primary_key = primary_key.auto_increment()
     name: str
@@ -13,14 +16,18 @@ class User(Object):
 db = PostgresDB()
 db.attach([User])
 
+
+
+
+
 # Create a user
 user = User.new(name="John", age=30)
-print(user)
+print("new user:", user)
 
 # Retrieve all users
-users = User.all()
+users = User.all(limit=None)
 for user in users:
     print(user)
 
-# Filter users
-adults = User.filter(lambda x: x.age >= 18)
+# Integrity of python id for the percieved same object
+print(id(user), id(users[-1]))
