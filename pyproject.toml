@@ -39,4 +39,4 @@ fastapi = [
 ]
 
 [tool.setuptools]
-packages = ["autodla"]
+packages = "find:"
