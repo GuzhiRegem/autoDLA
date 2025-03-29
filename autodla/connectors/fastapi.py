@@ -101,6 +101,16 @@ def create_soap_router(cls, prefix=None, tags=[]) -> APIRouter:
         res = cls.get_by_id(id_param)
         return res.to_dict()
 
+    @router.get("/get_history/{id_param}")
+    async def get_object_history_id(id_param: str):
+        res = cls.get_by_id(id_param)
+        return res.history()
+    
+    @router.get('/table')
+    async def read_table(limit=10, only_current=True, only_active=True):
+        res = cls.get_table_res(limit=limit, only_current=only_current, only_active=only_active).to_dicts()
+        return res
+
     fields = get_type_hints(cls)
     RequestModel = create_model(f"{cls.__name__}Request", **{k: (v, ...) for k, v in fields.items()})
     

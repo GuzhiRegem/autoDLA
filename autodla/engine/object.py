@@ -315,12 +315,12 @@ class Object(BaseModel):
 	def history(self):
 		self_res = self.__table.filter(lambda x: x[self.identifier_field] == getattr(self, self.identifier_field), limit=None, only_active=False, only_current=False)
 		out = {
-			"self": self_res,
+			"self": self_res.to_dicts(),
 			"dependecies": {}
 		}
 		for k, v in self.__dependecies.items():
 			dep_res = v['table'].filter(lambda x: x.first_id == getattr(self, self.identifier_field), limit=None, only_active=False, only_current=False)
-			out['dependecies'][k] = dep_res
+			out['dependecies'][k] = dep_res.to_dicts()
 		return out
 	
 	def update(self, **kwargs):
