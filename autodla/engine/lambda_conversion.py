@@ -21,7 +21,10 @@ class LambdaFinder(ast.NodeVisitor):
 
 def lambda_to_ast(lambda_func):
     try:
-        source = inspect.getsource(lambda_func).strip()
+        if type(lambda_func) == str:
+            source = lambda_func
+        else:
+            source = inspect.getsource(lambda_func).strip()
     except (IOError, TypeError) as e:
         raise TypeError(f"Failed to get lambda source: {str(e)}")
     root_tree = ast.parse(source)
@@ -270,7 +273,8 @@ def get_context_from_lamba(lambda_func):
     return {**vars(builtins), **found.frame.f_locals}
 
 def lambda_to_sql(schema, lambda_func, data_transformer : DataTransformer, ctx_vars={}, alias='x') -> str:
-    ctx_vars = get_context_from_lamba(lambda_func)
+    if not type(lambda_func) == str:
+        ctx_vars = get_context_from_lamba(lambda_func)
     lambda_node = lambda_to_ast(lambda_func)
     out = LambdaToSql(lambda_node, schema, data_transformer=data_transformer, ctx_vars=ctx_vars, alias=alias).transform()
     return out.st

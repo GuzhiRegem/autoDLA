@@ -41,6 +41,16 @@ class DB_Connection:
         for obj in ordered_objects:
             self.__classes[obj.__name__] = obj
             obj.set_db(self)
+    
+    def get_json_schema(self):
+        out = {}
+        for k, v in self.__classes.items():
+            out[k] = v.model_json_schema()
+        return out
+    
+    @property
+    def classes(self):
+        return self.__classes.values()
 
     def execute(self, query: str) -> pl.DataFrame:
         pass

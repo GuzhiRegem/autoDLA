@@ -213,7 +213,8 @@ class Object(BaseModel):
 		found = cls.__objects_map.get(data[cls.identifier_field])
 		try:
 			cls.model_validate(data)
-		except:
+		except Exception as e:
+			print(e)
 			return None
 		if found is not None:
 			found.__dict__.update(data)
@@ -230,6 +231,8 @@ class Object(BaseModel):
 		else:
 			res = cls.__table.filter(filter, limit, only_current, only_active)
 		obj_lis = res.to_dicts()
+		if obj_lis == []:
+			return []
 		id_list = res[cls.identifier_field].to_list()
 		
 		table_results = {}
@@ -258,9 +261,17 @@ class Object(BaseModel):
 				df = table_results[key]
 				lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
 				t_name = cls.__dependecies[key]["type"].__name__
-				obj[key] = [dep_tables[t_name].get(row) for row in lis]
+				val_lis = []
+				for row in lis:
+					val = dep_tables[t_name].get(row)
+					if val is not None:
+						val_lis.append(val)
+				obj[key] = val_lis
 				if not cls.__dependecies[key]['is_list']:
-					obj[key] = obj[key][0]
+					if obj[key] != []:
+						obj[key] = obj[key][0]
+					else:
+						obj[key] = None
 			updt = cls.__update_individual(obj)
 			if updt is not None:
 				out.append(updt)
