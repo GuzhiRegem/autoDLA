@@ -16,6 +16,7 @@ class User(Object):
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
     participants: list[User]
+    created_by: User = None
     group_name: str
 
 # Connect to DB and register models
@@ -27,7 +28,9 @@ db.attach([User, Group])
 
 
 #setup DB
-for obj in User.all(limit=None) + Group.all(limit=None):
+for obj in User.all(limit=None):
+    obj.delete()
+for obj in Group.all(limit=None):
     obj.delete()
 lis = []
 for i in range(2):
@@ -37,6 +40,7 @@ for i in range(2):
     ))
 g = Group.new(
     participants=lis,
+    created_by=lis[0],
     group_name="Group 1"
 )
 g2 = Group.new(

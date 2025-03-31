@@ -239,16 +239,16 @@ class Object(BaseModel):
 		dep_tables_required_ids = {}
 		for k, v in cls.__dependecies.items():
 			table_results[k] = v['table'].filter(lambda x: x.first_id in id_list, None, only_current=only_current, only_active=only_active)
-			ids = table_results[k]['second_id']
+			ids = set(table_results[k]['second_id'].to_list())
 			t_name = v['type'].__name__
 			if t_name not in dep_tables_required_ids:
 				dep_tables_required_ids[t_name] = {"type": v['type'], "ids": ids}
 			else:
-				dep_tables_required_ids[t_name] = dep_tables_required_ids[t_name]["ids"].list.set_union(ids)
+				dep_tables_required_ids[t_name]["ids"] = dep_tables_required_ids[t_name]["ids"].union(ids)
 		
 		dep_tables = {}
 		for k, v in dep_tables_required_ids.items():
-			l = v['ids'].to_list()
+			l = list(v['ids'])
 			id_field = v['type'].identifier_field
 			res = v['type'].filter(lambda x: x[id_field] in l)
 			dep_tables[k] = {}
@@ -301,13 +301,15 @@ class Object(BaseModel):
 				for j in new_rows:
 					v['table'].insert(j)
 			else:
-				v['table'].insert({
-					'connection_id': primary_key.generate(),
-					"first_id": out[cls.identifier_field],
-					"second_id": getattr(out, field)[v['type'].identifier_field],
-					"list_index": 0,
-					**dla_data()
-				})
+				val = getattr(out, field)
+				if val is not None:
+					v['table'].insert({
+						'connection_id': primary_key.generate(),
+						"first_id": out[cls.identifier_field],
+						"second_id": val[v['type'].identifier_field],
+						"list_index": 0,
+						**dla_data()
+					})
 		cls.__objects_map[str(out[cls.identifier_field])] = out
 		cls.__objects_list.append(out)
 		return out
