@@ -50,6 +50,8 @@ class DB_Connection:
             class_out = {}
             for k, f in class_def.items():
                 class_out[k] = {}
+                if class_i.identifier_field == k:
+                    class_out[k]["primary_key"] = True
                 if "depends" in f:
                     class_out[k]["depends"] = f'$ref:{f["depends"].__name__}'
                 type_st = f["type"].__name__

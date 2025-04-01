@@ -6,6 +6,7 @@ from autodla.dbs import PostgresDB
 from autodla.connectors.fastapi import connect_db
 from autodla.utils import DataGenerator
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 
 
 class User(Object):
@@ -16,7 +17,7 @@ class User(Object):
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
     participants: list[User]
-    created_by: User = None
+    created_by: User
     group_name: str
     #age : int = None
 
@@ -46,6 +47,7 @@ g = Group.new(
 )
 g2 = Group.new(
     participants=[],
+    created_by=lis[0],
     group_name="Group 2"
 )
 
