@@ -1,6 +1,7 @@
 import polars as pl
 from ..engine.data_conversion import DataTransformer
 from ..engine.query_builder import QueryBuilder
+from typing import get_origin, get_args
 
 class DB_Connection:
     __data_transformer : DataTransformer
@@ -44,8 +45,20 @@ class DB_Connection:
     
     def get_json_schema(self):
         out = {}
-        for k, v in self.__classes.items():
-            out[k] = v.model_json_schema()
+        for class_key, class_i in self.__classes.items():
+            class_def = class_i.get_types()
+            class_out = {}
+            for k, f in class_def.items():
+                class_out[k] = {}
+                if "depends" in f:
+                    class_out[k]["depends"] = f'$ref:{f["depends"].__name__}'
+                type_st = f["type"].__name__
+                if get_origin(f['type']) == list:
+                    arg = get_args(f["type"])
+                    if len(arg) == 1:
+                        type_st += f'[{arg[0].__name__}]'
+                class_out[k]["type"] = type_st
+            out[class_key] = class_out
         return out
     
     @property

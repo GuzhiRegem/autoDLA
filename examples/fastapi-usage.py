@@ -18,6 +18,7 @@ class Group(Object):
     participants: list[User]
     created_by: User = None
     group_name: str
+    #age : int = None
 
 # Connect to DB and register models
 db = PostgresDB()
