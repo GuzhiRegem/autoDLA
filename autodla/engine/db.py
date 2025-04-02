@@ -54,6 +54,8 @@ class DB_Connection:
                     class_out[k]["primary_key"] = True
                 if "depends" in f:
                     class_out[k]["depends"] = f'$ref:{f["depends"].__name__}'
+                if "is_list" in f:
+                    class_out[k]["is_list"] = f["is_list"]
                 type_st = f["type"].__name__
                 if get_origin(f['type']) == list:
                     arg = get_args(f["type"])
