@@ -40,4 +40,4 @@ fastapi = [
 ]
 
 [tool.setuptools]
-packages = ["autodla", "autodla.engine", "autodla.utils", "autodla.dbs"]
+packages = ["autodla", "autodla.engine", "autodla.utils", "autodla.dbs", "autodla.connectors"]
