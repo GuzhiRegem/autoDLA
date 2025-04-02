@@ -123,7 +123,7 @@ class Table:
 
 class Object(BaseModel):
 	__table : ClassVar[Table] = None
-	__dependecies : ClassVar[list] = []
+	__dependencies : ClassVar[list] = []
 	identifier_field : ClassVar[str] = "id"
 	__objects_list : ClassVar[List] = []
 	__objects_map : ClassVar[dict] = {}
@@ -131,7 +131,7 @@ class Object(BaseModel):
 	@classmethod
 	def set_db(cls, db : DB_Connection):
 		schema = cls.get_types()
-		dependecies = {}
+		dependencies = {}
 		common_fields = {
 			'DLA_object_id': {
 				"type": uuid.UUID
@@ -155,7 +155,7 @@ class Object(BaseModel):
 		for k, i in schema.items():
 			if 'depends' in i:
 				table_name = f"{cls.__name__.lower()}__{k}__{i['depends'].__name__.lower()}"
-				dependecies[k] = {
+				dependencies[k] = {
 					'is_list': i.get("is_list") == True,
 					'type': i['depends'],
 					'table': Table(
@@ -178,10 +178,10 @@ class Object(BaseModel):
 						db
 					)
 				}
-		for i in dependecies:
+		for i in dependencies:
 			del schema[i]
 		cls.__table = Table(cls.__name__.lower(), {**schema,**common_fields}, db)
-		cls.__dependecies = dependecies
+		cls.__dependencies = dependencies
 
 	@classmethod
 	def get_types(cls):
@@ -249,7 +249,7 @@ class Object(BaseModel):
 		
 		table_results = {}
 		dep_tables_required_ids = {}
-		for k, v in cls.__dependecies.items():
+		for k, v in cls.__dependencies.items():
 			table_results[k] = v['table'].filter(lambda x: x.first_id in id_list, None, only_current=only_current, only_active=only_active)
 			ids = set(table_results[k]['second_id'].to_list())
 			t_name = v['type'].__name__
@@ -271,19 +271,19 @@ class Object(BaseModel):
 
 		out = []
 		for obj in obj_lis:
-			for key in cls.__dependecies:
+			for key in cls.__dependencies:
 				df = table_results[key]
 				if len(df) == 0:
 					continue
 				lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
-				t_name = cls.__dependecies[key]["type"].__name__
+				t_name = cls.__dependencies[key]["type"].__name__
 				val_lis = []
 				for row in lis:
 					val = dep_tables[t_name].get(row)
 					if val is not None:
 						val_lis.append(val)
 				obj[key] = val_lis
-				if not cls.__dependecies[key]['is_list']:
+				if not cls.__dependencies[key]['is_list']:
 					if obj[key] != []:
 						obj[key] = obj[key][0]
 					else:
@@ -299,11 +299,11 @@ class Object(BaseModel):
 			raise ImportError('DB not defined')
 		out = cls(**kwargs)
 		data = out.to_dict()
-		for i in cls.__dependecies:
+		for i in cls.__dependencies:
 			del data[i]
 		dla_data = dla_dict("INSERT", is_current=True)
 		cls.__table.insert({**data, **dla_data()})
-		for field, v in cls.__dependecies.items():
+		for field, v in cls.__dependencies.items():
 			if v['is_list']:
 				new_rows = []
 				for idx, i in enumerate(getattr(out, field)):
@@ -334,20 +334,20 @@ class Object(BaseModel):
 		self_res = self.__table.filter(lambda x: x[self.identifier_field] == getattr(self, self.identifier_field), limit=None, only_active=False, only_current=False)
 		out = {
 			"self": self_res.to_dicts(),
-			"dependecies": {}
+			"dependencies": {}
 		}
-		for k, v in self.__dependecies.items():
+		for k, v in self.__dependencies.items():
 			dep_res = v['table'].filter(lambda x: x.first_id == getattr(self, self.identifier_field), limit=None, only_active=False, only_current=False)
-			out['dependecies'][k] = dep_res.to_dicts()
+			out['dependencies'][k] = dep_res.to_dicts()
 		return out
 	
 	def update(self, **kwargs):
 		data = {**self.to_dict(), **kwargs}
 		dla_data_insert = dla_dict("UPDATE", is_current=True)
 		for key, value in kwargs.items():
-			if key in self.__dependecies:
+			if key in self.__dependencies:
 				del data[key]
-				dependency = self.__dependecies[key]
+				dependency = self.__dependencies[key]
 				dependency['table'].update(lambda x: x.first_id == self.id, {'DLA_is_current': False})
 				new_rows = []
 				if dependency['is_list']:
@@ -376,7 +376,7 @@ class Object(BaseModel):
 	def delete(self):
 		data = {**self.to_dict()}
 		dla_data_delete = dla_dict("DELETE", is_current=True, is_active=False)
-		for key, dependency in self.__dependecies.items():
+		for key, dependency in self.__dependencies.items():
 			del data[key]
 			dependency['table'].update(lambda x: x.first_id == self.id, {'DLA_is_current': False})
 			value = getattr(self, key)
