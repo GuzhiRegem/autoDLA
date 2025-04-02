@@ -5,7 +5,7 @@ from ..engine.db import DB_Connection
 from ..engine.object import primary_key
 from ..engine.query_builder import QueryBuilder
 from datetime import date, datetime
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 import os
 
@@ -75,7 +75,7 @@ class PostgresDataTransformer(DataTransformer):
         str: DataConversion("TEXT", lambda x: f"'{x}'"),
         bool: DataConversion("BOOL", lambda x: {True: "TRUE", False: "FALSE"}[x]),
         date: DataConversion("DATE", lambda x: f"'{x.year}-{x.month}-{x.day}'"),
-        datetime: DataConversion("TIMESTAMP", lambda x: f"'{x.strftime(DATETIME_FORMAT)}'")
+        datetime: DataConversion("TIMESTAMP", lambda x: f"'{x.strftime(DATETIME_FORMAT)}'"),
     }
     OPERATOR_DICT = {
         "numeric": {

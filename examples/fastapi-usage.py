@@ -13,13 +13,13 @@ class User(Object):
     id: primary_key = primary_key.auto_increment()
     name: str
     age: int
+    nickname: Optional[str] = None
 
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
     participants: list[User]
-    created_by: User
+    created_by: Optional[User] = None
     group_name: str
-    #age : int = None
 
 # Connect to DB and register models
 db = PostgresDB()
@@ -47,7 +47,6 @@ g = Group.new(
 )
 g2 = Group.new(
     participants=[],
-    created_by=lis[0],
     group_name="Group 2"
 )
 

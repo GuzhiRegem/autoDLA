@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.staticfiles import StaticFiles
 from typing import Type, TypeVar, Generic, get_type_hints
 from pydantic import create_model, ConfigDict
@@ -99,11 +99,15 @@ def create_soap_router(cls, prefix=None, tags=[]) -> APIRouter:
     @router.get("/get/{id_param}")
     async def get_object_id(id_param: str):
         res = cls.get_by_id(id_param)
+        if res is None:
+            return HTTPException(400, f'{cls.__name__} not found')
         return res.to_dict()
 
     @router.get("/get_history/{id_param}")
     async def get_object_history_id(id_param: str):
         res = cls.get_by_id(id_param)
+        if res is None:
+            return HTTPException(400, f'{cls.__name__} not found')
         return res.history()
     
     @router.get('/table')

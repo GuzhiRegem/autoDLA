@@ -1,6 +1,7 @@
 from dataclasses import field, _MISSING_TYPE
 from datetime import datetime
-from typing import List, get_origin, ClassVar, Literal, get_args, TypeVar, Any
+from types import NoneType
+from typing import List, Union, get_origin, ClassVar, Literal, get_args, TypeVar, Any
 import uuid
 import polars as pl
 from ..engine.db import DB_Connection
@@ -155,7 +156,7 @@ class Object(BaseModel):
 			if 'depends' in i:
 				table_name = f"{cls.__name__.lower()}__{k}__{i['depends'].__name__.lower()}"
 				dependecies[k] = {
-					'is_list': get_origin(i['type']) == list,
+					'is_list': i.get("is_list") == True,
 					'type': i['depends'],
 					'table': Table(
 						table_name,
@@ -189,18 +190,29 @@ class Object(BaseModel):
 		for i in fields:
 			if(get_origin(fields[i].annotation) == ClassVar):
 				continue
-			type_out = {
-				"type": fields[i].annotation
-			}
+			type_out = {}
+			tp = fields[i].annotation
+			ori, arg = get_origin(tp), get_args(tp)
+			if ori == Union:
+				if arg[1] == NoneType:
+					type_out["nullable"] = True
+					tp = arg[0]
+					ori, arg = get_origin(tp), get_args(tp)
+			if type_out.get('nullable') == True and fields[i].default != None:
+				raise TypeError('Field with type Optional must initialize to None')
+			if type_out.get('nullable') != True and fields[i].default == None:
+				raise TypeError('Field initialized to None must be of type Optional')
 			if type(fields[i].default) not in [_MISSING_TYPE, PydanticUndefinedType]:
 				type_out["default"] = fields[i].default
 			if type(fields[i].default_factory) not in [_MISSING_TYPE, PydanticUndefinedType]:
 				type_out["default_factory"] = fields[i].default_factory
-			ar = fields[i].annotation
-			if get_origin(ar) == list:
-				ar = get_args(ar)[0]
-			if issubclass(ar, Object):
-				type_out["depends"] = ar
+			if ori == list:
+				tp = arg[0]
+				ori, arg = get_origin(tp), get_args(tp)
+				type_out["is_list"] = True
+			if issubclass(tp, Object):
+				type_out["depends"] = tp
+			type_out["type"] = tp
 			out[i] = type_out
 		return out
 	
@@ -250,8 +262,10 @@ class Object(BaseModel):
 		for k, v in dep_tables_required_ids.items():
 			l = list(v['ids'])
 			id_field = v['type'].identifier_field
-			res = v['type'].filter(lambda x: x[id_field] in l)
 			dep_tables[k] = {}
+			if len(l) == 0:
+				continue
+			res = v['type'].filter(lambda x: x[id_field] in l)
 			for obj in res:
 				dep_tables[k][getattr(obj, v['type'].identifier_field)] = obj
 
@@ -259,6 +273,8 @@ class Object(BaseModel):
 		for obj in obj_lis:
 			for key in cls.__dependecies:
 				df = table_results[key]
+				if len(df) == 0:
+					continue
 				lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
 				t_name = cls.__dependecies[key]["type"].__name__
 				val_lis = []
@@ -364,6 +380,8 @@ class Object(BaseModel):
 			del data[key]
 			dependency['table'].update(lambda x: x.first_id == self.id, {'DLA_is_current': False})
 			value = getattr(self, key)
+			if value is None:
+				continue
 			new_rows = []
 			if dependency['is_list']:
 				for idx, i in enumerate(value):

@@ -87,7 +87,7 @@ class DB_Connection:
         print(current_data_schema)
         if data_schema == current_data_schema:
             return
-        schema = self.data_transformer.convert_data_schema(data_schema)
+        schema = self.data_transformer.convert_data_schema(schema)
         self.execute(self.query.drop_table(table_name, if_exists=True))
         qry = self.query.create_table(table_name, schema)
         self.execute(qry)
