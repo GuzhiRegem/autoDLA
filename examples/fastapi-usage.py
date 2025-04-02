@@ -14,6 +14,7 @@ class User(Object):
     name: str
     age: int
     nickname: Optional[str] = None
+    grossery_list : list[str] = []
 
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
@@ -40,6 +41,7 @@ for i in range(2):
         name=DataGenerator.name(),
         age=DataGenerator.age()
     ))
+lis[0].update(grossery_list=['apple', 'juice'])
 g = Group.new(
     participants=lis,
     created_by=lis[0],

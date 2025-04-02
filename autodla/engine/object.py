@@ -157,6 +157,7 @@ class Object(BaseModel):
 				table_name = f"{cls.__name__.lower()}__{k}__{i['depends'].__name__.lower()}"
 				dependencies[k] = {
 					'is_list': i.get("is_list") == True,
+					'is_value': False,
 					'type': i['depends'],
 					'table': Table(
 						table_name,
@@ -169,6 +170,32 @@ class Object(BaseModel):
 							},
 							"second_id": {
 								"type": primary_key
+							},
+							"list_index": {
+								"type": int
+							}
+							,**common_fields
+						},
+						db
+					)
+				}
+			elif 'is_list' in i:
+				table_name = f"{cls.__name__.lower()}__{k}"
+				dependencies[k] = {
+					'is_list': i.get("is_list") == True,
+					'is_value': True,
+					'type': i["type"],
+					'table': Table(
+						table_name,
+						{
+							"connection_id": {
+								"type": primary_key
+							},
+							"first_id": {
+								"type": primary_key
+							},
+							"value": {
+								"type": i["type"]
 							},
 							"list_index": {
 								"type": int
@@ -218,6 +245,7 @@ class Object(BaseModel):
 	
 	@classmethod
 	def __update_individual(cls, data_inp):
+		print("UPDATE INDIVIDUAL", cls, data_inp)
 		data = {}
 		for k, v in data_inp.items():
 			if not k.upper().startswith("DLA_"):
@@ -250,6 +278,8 @@ class Object(BaseModel):
 		table_results = {}
 		dep_tables_required_ids = {}
 		for k, v in cls.__dependencies.items():
+			if v['is_value']:
+				continue
 			table_results[k] = v['table'].filter(lambda x: x.first_id in id_list, None, only_current=only_current, only_active=only_active)
 			ids = set(table_results[k]['second_id'].to_list())
 			t_name = v['type'].__name__
@@ -272,16 +302,20 @@ class Object(BaseModel):
 		out = []
 		for obj in obj_lis:
 			for key in cls.__dependencies:
-				df = table_results[key]
-				if len(df) == 0:
+				if cls.__dependencies[key]['is_value']:
+					obj_id = obj[cls.identifier_field]
+					res = cls.__dependencies[key]['table'].filter(lambda x: x.first_id == obj_id)['value'].to_list()
+					obj[key] = res
 					continue
-				lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
-				t_name = cls.__dependencies[key]["type"].__name__
+				df = table_results[key]
 				val_lis = []
-				for row in lis:
-					val = dep_tables[t_name].get(row)
-					if val is not None:
-						val_lis.append(val)
+				t_name = cls.__dependencies[key]["type"].__name__
+				if len(df) > 0:
+					lis = df.filter(df['first_id'] == obj[cls.identifier_field])['second_id'].to_list()
+					for row in lis:
+						val = dep_tables[t_name].get(row)
+						if val is not None:
+							val_lis.append(val)
 				obj[key] = val_lis
 				if not cls.__dependencies[key]['is_list']:
 					if obj[key] != []:
@@ -306,14 +340,24 @@ class Object(BaseModel):
 		for field, v in cls.__dependencies.items():
 			if v['is_list']:
 				new_rows = []
-				for idx, i in enumerate(getattr(out, field)):
-					new_rows.append({
-						'connection_id': primary_key.generate(),
-						"first_id": out[cls.identifier_field],
-						"second_id": i[v['type'].identifier_field],
-						"list_index": idx,
-						**dla_data()
-					})
+				if v['is_value']:
+					for idx, i in enumerate(getattr(out, field)):
+						new_rows.append({
+							'connection_id': primary_key.generate(),
+							"first_id": out[cls.identifier_field],
+							"value": i,
+							"list_index": idx,
+							**dla_data()
+						})
+				else:
+					for idx, i in enumerate(getattr(out, field)):
+						new_rows.append({
+							'connection_id': primary_key.generate(),
+							"first_id": out[cls.identifier_field],
+							"second_id": i[v['type'].identifier_field],
+							"list_index": idx,
+							**dla_data()
+						})
 				for j in new_rows:
 					v['table'].insert(j)
 			else:
@@ -350,7 +394,16 @@ class Object(BaseModel):
 				dependency = self.__dependencies[key]
 				dependency['table'].update(lambda x: x.first_id == self.id, {'DLA_is_current': False})
 				new_rows = []
-				if dependency['is_list']:
+				if dependency['is_value']:
+					for idx, i in enumerate(value):
+						new_rows.append({
+							'connection_id': primary_key.generate(),
+							"first_id": self[self.identifier_field],
+							"value": i,
+							"list_index": idx,
+							**dla_data_insert()
+						})
+				elif dependency['is_list']:
 					for idx, i in enumerate(value):
 						new_rows.append({
 							'connection_id': primary_key.generate(),
@@ -383,7 +436,16 @@ class Object(BaseModel):
 			if value is None:
 				continue
 			new_rows = []
-			if dependency['is_list']:
+			if dependency['is_value']:
+				for idx, i in enumerate(value):
+					new_rows.append({
+						'connection_id': primary_key.generate(),
+						"first_id": self[self.identifier_field],
+						"value": i,
+						"list_index": idx,
+						**dla_data_delete()
+					})
+			elif dependency['is_list']:
 				for idx, i in enumerate(value):
 					new_rows.append({
 						'connection_id': primary_key.generate(),
