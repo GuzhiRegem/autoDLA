@@ -1,7 +1,68 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
-from typing import Type, TypeVar, Generic, get_type_hints
-from pydantic import create_model, ConfigDict
+from fastapi.responses import FileResponse
+from typing import Annotated, Type, TypeVar, Generic, get_type_hints
+from pydantic import BaseModel, create_model, ConfigDict
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import hashlib
+import uuid
+import os
+from importlib import resources as impresources
+from .. import static as staticdir
+import tempfile
+import shutil
+# Create a temporary directory to extract the static files
+temp_dir = tempfile.mkdtemp()
+# Copy the static files from the package to the temporary directory
+static_package_dir = impresources.files(staticdir)
+static_temp_dir = os.path.join(temp_dir, 'static')
+os.makedirs(static_temp_dir, exist_ok=True)
+def copy_dir_recursively(source_dir, dest_dir):
+    # Create the destination directory if it doesn't exist
+    os.makedirs(dest_dir, exist_ok=True)
+    
+    # Iterate through all items in the source directory
+    for item in source_dir.iterdir():
+        # Get the destination path
+        dest_path = os.path.join(dest_dir, item.name)
+        
+        if item.is_file():
+            # If it's a file, copy it directly
+            with item.open('rb') as src, open(dest_path, 'wb') as dst:
+                shutil.copyfileobj(src, dst)
+        elif item.is_dir():
+            # If it's a directory, recursively copy it
+            copy_dir_recursively(item, dest_path)
+
+# Call the function with your directories
+copy_dir_recursively(static_package_dir, static_temp_dir)
+
+def hash(st):
+    return hashlib.sha256(st.encode()).hexdigest()
+
+AUTODLAWEB_USER = 'autodla'
+if "AUTODLAWEB_USER" in os.environ:
+    AUTODLAWEB_USER = os.environ.get("AUTODLAWEB_USER")
+AUTODLAWEB_PASSWORD = hash('password')
+if "AUTODLAWEB_PASSWORD" in os.environ:
+    AUTODLAWEB_PASSWORD = hash(os.environ.get("AUTODLAWEB_PASSWORD"))
+
+def generate_token():
+    return hash(str(uuid.uuid4()))
+current_token = ""
+def create_new_token():
+    global current_token
+    new_token = generate_token()
+    current_token = new_token
+    return new_token
+def validate_token(token):
+    global current_token
+    if token != current_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 def json_to_lambda_str(json_condition):
     """
@@ -74,17 +135,18 @@ def json_to_lambda_str(json_condition):
     else:
         raise ValueError(f"Invalid condition format: {json_condition}")
 
-def create_soap_router(cls, prefix=None, tags=[]) -> APIRouter:
+def create_soap_router(cls, prefix=None, tags=[], oauth2_scheme:OAuth2PasswordBearer=None) -> APIRouter:
     if prefix is None:
         prefix = f"/{cls.__name__}"
     if tags == []:
-        tags = [cls.__name__]
+        tags = [f"autodla_{cls.__name__}"]
     router = APIRouter(prefix=prefix, tags=tags)
     
     import json
     import inspect
     @router.get("/list")
-    async def read_object(limit=10, filter:str=None):
+    async def read_object(token: Annotated[str, Depends(oauth2_scheme)], limit=10, filter:str=None):
+        validate_token(token)
         if filter is None:
             res = cls.all(limit)
         else:
@@ -97,21 +159,24 @@ def create_soap_router(cls, prefix=None, tags=[]) -> APIRouter:
         return out
    
     @router.get("/get/{id_param}")
-    async def get_object_id(id_param: str):
+    async def get_object_id(token: Annotated[str, Depends(oauth2_scheme)], id_param: str):
+        validate_token(token)
         res = cls.get_by_id(id_param)
         if res is None:
             return HTTPException(400, f'{cls.__name__} not found')
         return res.to_dict()
 
     @router.get("/get_history/{id_param}")
-    async def get_object_history_id(id_param: str):
+    async def get_object_history_id(token: Annotated[str, Depends(oauth2_scheme)], id_param: str):
+        validate_token(token)
         res = cls.get_by_id(id_param)
         if res is None:
             return HTTPException(400, f'{cls.__name__} not found')
         return res.history()
     
     @router.get('/table')
-    async def read_table(limit=10, only_current=True, only_active=True):
+    async def read_table(token: Annotated[str, Depends(oauth2_scheme)], limit=10, only_current=True, only_active=True):
+        validate_token(token)
         res = cls.get_table_res(limit=limit, only_current=only_current, only_active=only_active).to_dicts()
         return res
 
@@ -119,19 +184,22 @@ def create_soap_router(cls, prefix=None, tags=[]) -> APIRouter:
     RequestModel = create_model(f"{cls.__name__}Request", **{k: (v, ...) for k, v in fields.items()})
     
     @router.post('/new')
-    async def create_object(obj: RequestModel):
+    async def create_object(token: Annotated[str, Depends(oauth2_scheme)], obj: RequestModel):
+        validate_token(token)
         n = cls.new(**obj.model_dump())
         return n.to_dict()
     
     @router.put('/edit/{id_param}')
-    async def edit_object(id_param, data: dict):
+    async def edit_object(token: Annotated[str, Depends(oauth2_scheme)], id_param, data: dict):
+        validate_token(token)
         obj = cls.get_by_id(id_param)
         obj.update(**data)
         return obj.to_dict()
 
     
     @router.delete("/delete/{id_param}")
-    async def delete_object(id_param: str):
+    async def delete_object(token: Annotated[str, Depends(oauth2_scheme)], id_param: str):
+        validate_token(token)
         obj = cls.get_by_id(id_param)
         obj.delete()
         return {"status": "done"}
@@ -139,10 +207,39 @@ def create_soap_router(cls, prefix=None, tags=[]) -> APIRouter:
     return router
 
 def connect_db(app, db):
-    @app.get('/get_json_schema')
-    def get_schema():
+    admin_endpoints_prefix = '/autodla-admin'
+
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{admin_endpoints_prefix}/admin/token")
+
+    web_router = APIRouter(prefix="/autodla-web", tags=[f"autodla_web"])
+    sub_directories = ['', 'assets/']
+    for sub_directory in sub_directories:
+        @web_router.get('/' + sub_directory + '{filename}')
+        async def static_files(filename = 'index.html'):
+            return FileResponse(f'{static_temp_dir}/{sub_directory}{filename}')
+    @web_router.get('/')
+    async def static_home():
+        return FileResponse(f'{static_temp_dir}/index.html')
+    
+    admin_router = APIRouter(prefix="/admin", tags=[f"autodla_admin"])
+    @admin_router.post("/token")
+    async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+        global current_token
+        if form_data.username != AUTODLAWEB_USER:
+            raise HTTPException(status_code=400, detail="Incorrect username or password")
+        hashed_password = hash(form_data.password)
+        if not hashed_password == AUTODLAWEB_PASSWORD:
+            raise HTTPException(status_code=400, detail="Incorrect username or password")
+        current_token = generate_token()
+        return {"access_token": current_token, "token_type": "bearer"}
+
+    @admin_router.get(f'/get_json_schema')
+    def get_schema(token: Annotated[str, Depends(oauth2_scheme)]):
+        validate_token(token)
         return db.get_json_schema()
     
+    app.include_router(web_router)
+    app.include_router(admin_router, prefix=admin_endpoints_prefix)
     for cls in db.classes:
-        r = create_soap_router(cls)
-        app.include_router(r)
+        r = create_soap_router(cls, oauth2_scheme=oauth2_scheme)
+        app.include_router(r, prefix=admin_endpoints_prefix)
