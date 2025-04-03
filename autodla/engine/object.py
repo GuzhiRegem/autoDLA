@@ -415,13 +415,14 @@ class Object(BaseModel):
 							**dla_data_insert()
 						})
 				else:
-					new_rows.append({
-						'connection_id': primary_key.generate(),
-						"first_id": self[self.identifier_field],
-						"second_id": value[dependency['type'].identifier_field],
-						"list_index": 0,
-						**dla_data_insert()
-					})
+					if value is not None:
+						new_rows.append({
+							'connection_id': primary_key.generate(),
+							"first_id": self[self.identifier_field],
+							"second_id": value[dependency['type'].identifier_field],
+							"list_index": 0,
+							**dla_data_insert()
+						})
 				for j in new_rows:
 					dependency['table'].insert(j)
 			setattr(self, key, value)
@@ -497,4 +498,4 @@ class Object(BaseModel):
 		return self.model_dump_json()
   
 	def __getitem__(self, item):
-		return self.to_dict().get(item)
+		return getattr(self, item)
