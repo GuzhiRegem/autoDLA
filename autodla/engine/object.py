@@ -331,6 +331,8 @@ class Object(BaseModel):
 	def new(cls, **kwargs):
 		if cls.__table is None:
 			raise ImportError('DB not defined')
+		if cls.identifier_field in kwargs:
+			del kwargs[cls.identifier_field]
 		out = cls(**kwargs)
 		data = out.to_dict()
 		for i in cls.__dependencies:
