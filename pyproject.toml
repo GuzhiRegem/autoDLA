@@ -35,10 +35,10 @@ db-postgres = [
     "psycopg2-binary>=2.9.3"
 ]
 fastapi = [
-    "python-multipart"
+    "python-multipart",
     "fastapi>=0.68.0",
     "uvicorn>=0.15.0",
 ]
 
 [tool.setuptools]
-packages = ["autodla", "autodla.engine", "autodla.utils", "autodla.dbs", "autodla.connectors", "autodla.static", "autodla.static.assets"]
+packages = ["autodla", "autodla.engine", "autodla.utils", "autodla.dbs", "autodla.connectors", "autodla.static"]
