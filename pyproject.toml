@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autodla"
-version = "0.0.5"
+version = "0.0.6"
 description = "A simple ORM with history tracking for rapid POC development"
 readme = "README.md"
 authors = [{name = "GuzhiRegem", email = "sebastian.moreiradl@gmail.com"}]
