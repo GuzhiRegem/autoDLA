@@ -13,14 +13,11 @@ class User(Object):
     id: primary_key = primary_key.auto_increment()
     name: str
     age: int
-    nickname: Optional[str] = None
-    grossery_list : list[str] = []
 
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
-    participants: list[User]
-    created_by: Optional[User] = None
     group_name: str
+    participants: list[User]
 
 # Connect to DB and register models
 db = PostgresDB()
@@ -41,15 +38,9 @@ for i in range(2):
         name=DataGenerator.name(),
         age=DataGenerator.age()
     ))
-lis[0].update(grossery_list=['apple', 'juice'])
 g = Group.new(
     participants=lis,
-    created_by=lis[0],
     group_name="Group 1"
-)
-g2 = Group.new(
-    participants=[],
-    group_name="Group 2"
 )
 
 

@@ -24,4 +24,4 @@ For example, PostgreSQL connection:
 ```bash
 pip install autodla[db-postgres]
 ```
-The complete list of features can be found [here](/reference/dependencies_list)
+The complete list of features can be found [here](reference/dependencies_list.md)

@@ -29,7 +29,7 @@ this class includes a variety of `staticmethods` that allow you to generate dist
 users = []
 for i in range(3):
     usr = User.new(
-        name=DataGenerator.name()
+        name=DataGenerator.name(),
         age=DataGenerator.age()
     )
     users.append(usr)
@@ -59,6 +59,8 @@ For the example we are working with, in the DB the table `public.users` was gene
 | id | uuid |
 | age | integer |
 | name | text |
+
+> These dla_* fields power AutoDLA's versioning and audit features. Every object tracks its modification history automatically.
 
 The rows currently in the table are these:
 
@@ -132,14 +134,14 @@ usr = grp.participants[0]
 print(usr)
 ### User( name=Karen , age=20 )
 
-# Modify user from the group
-grp.participants[0].update(age=grp.participants[0].age + 1)
-print(users[0])
+# Modify user
+usr.update(age=usr.age + 1)
+print(users[0]) # previously defined list
 ### User( name=Karen , age=21 )
 ```
 
 ## Filtering
-AutoDLA includes a built-in method to turn lambda functions into SQL Querys, thanks to this, to filter data in AutoDLA you need to write a function to apply to get specific data
+AutoDLA includes a built-in method to turn lambda functions into SQL Querys, thanks to this, to filter data in AutoDLA all you need to do is to write a function for the condition you want to apply
 
 ```python
 # get by name
@@ -150,4 +152,25 @@ filtered_users = User.filter(lambda x: x.age > 18)
 
 # use python functions
 filtered_users = User.filter(lambda x: x.name.startswith('K'))
+
+# boolean expressions
+filtered_users = User.filter(lambda x: x.name == 'Karen' and x.age > 18)
 ```
+
+## In-memory object integrity
+Something that others ORMs fail to accomplish is the integrity between the observed objects in the DB and the object you are working with in memory, leading to data issues down the line like duplicated values and others.
+AutoDLA handles this integrity, the objects you are working with, are always the same as they are in the DB.
+```python
+
+u1 = users[0] # User ( name=Karen , age=21 )
+u2 = grp.participants[0] # User ( name=Karen , age=21 )
+u3 = User.filter(lambda x: x.name == 'Karen')[0] # User ( name=Karen , age=21 )
+
+u1 == u2 # True
+u1 == u3 # True
+u2 == u3 # True
+id(u1) == id(u2) #True
+```
+
+## Auto-generated admin panel
+AutoDLA can automatically generate an admin panel for CRUD operations, learn more about this in [AutoDLA WEB](autodla_web.md)

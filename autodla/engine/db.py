@@ -1,6 +1,6 @@
 import polars as pl
-from ..engine.data_conversion import DataTransformer
-from ..engine.query_builder import QueryBuilder
+from autodla.engine.data_conversion import DataTransformer
+from autodla.engine.query_builder import QueryBuilder
 from typing import get_origin, get_args
 
 class DB_Connection:

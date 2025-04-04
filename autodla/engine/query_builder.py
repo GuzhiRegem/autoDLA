@@ -1,6 +1,6 @@
 import polars as pl
 from typing import Callable, List, Optional
-from ..engine.data_conversion import DataTransformer
+from autodla.engine.data_conversion import DataTransformer
 
 class QueryBuilder:
     def __init__(self, data_transformer = DataTransformer):

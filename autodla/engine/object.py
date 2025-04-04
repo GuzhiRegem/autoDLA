@@ -4,8 +4,8 @@ from types import NoneType
 from typing import List, Union, get_origin, ClassVar, Literal, get_args, TypeVar, Any
 import uuid
 import polars as pl
-from ..engine.db import DB_Connection
-from ..engine.lambda_conversion import lambda_to_sql
+from autodla.engine.db import DB_Connection
+from autodla.engine.lambda_conversion import lambda_to_sql
 from pydantic import BaseModel, GetCoreSchemaHandler, TypeAdapter
 from pydantic_core import CoreSchema, core_schema, PydanticUndefinedType
 import warnings

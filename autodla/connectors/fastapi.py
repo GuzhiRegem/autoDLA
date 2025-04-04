@@ -8,7 +8,7 @@ import hashlib
 import uuid
 import os
 from importlib import resources as impresources
-from .. import static as staticdir
+from autodla import static as staticdir
 import tempfile
 import shutil
 # Create a temporary directory to extract the static files

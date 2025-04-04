@@ -2,6 +2,8 @@ site_name: AutoDLA
 repo_url: https://github.com/GuzhiRegem/autoDLA
 repo_name: autoDLA
 edit_uri: edit/main/docs/
+
+
 theme:
   name: material
   language: en
@@ -13,8 +15,16 @@ theme:
     - navigation.instant
     - navigation.tabs
     - navigation.top
+  logo: assets/autodla-logo-simple.png
+  favicon: assets/autodla-icon.png
+plugins:
+  - glightbox
+  - search
 
 markdown_extensions:
+  - attr_list
+  - md_in_html
+  - pymdownx.blocks.caption
   - tables
   - pymdownx.highlight:
       anchor_linenums: true
@@ -31,7 +41,9 @@ nav:
       - Basic Usage: basic_usage.md
       - More Features: advanced_usage.md
       - AutoDLA WEB: autodla_web.md
+      - Licence: license.md
   - Reference:
       - Dependencies: reference/dependencies_list.md
+      - Environment variables: reference/environment_variables.md
       - Object: reference/object.md
       - Primary key: reference/primary_key.md

@@ -1,9 +1,9 @@
 import psycopg2
 import polars as pl
-from ..engine.data_conversion import DataTransformer, DataConversion
-from ..engine.db import DB_Connection
-from ..engine.object import primary_key
-from ..engine.query_builder import QueryBuilder
+from autodla.engine.data_conversion import DataTransformer, DataConversion
+from autodla.engine.db import DB_Connection
+from autodla.engine.object import primary_key
+from autodla.engine.query_builder import QueryBuilder
 from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
@@ -19,8 +19,8 @@ POSTGRES_PASSWORD = 'password'
 if "AUTODLA_POSTGRES_PASSWORD" in os.environ:
     POSTGRES_PASSWORD = os.environ.get("AUTODLA_POSTGRES_PASSWORD")
 POSTGRES_URL = 'localhost'
-if "AUTODLA_POSTGRES_URL" in os.environ:
-    POSTGRES_URL = os.environ.get("AUTODLA_POSTGRES_URL")
+if "AUTODLA_POSTGRES_HOST" in os.environ:
+    POSTGRES_URL = os.environ.get("AUTODLA_POSTGRES_HOST")
 POSTGRES_DB = 'my_db'
 if "AUTODLA_POSTGRES_DB" in os.environ:
     POSTGRES_DB = os.environ.get("AUTODLA_POSTGRES_DB")

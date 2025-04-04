@@ -1,4 +1,4 @@
-AutoDLA works with models, to start, you'll need to first build a usable model that inherits from [Object](/reference/object/):
+AutoDLA works with models, to start, you'll need to first build a usable model that inherits from [Object](reference/object.md):
 ```python
 from autodla import Object, primary_key
 
@@ -9,7 +9,7 @@ class User(Object):
 ```
 > **WARNING:** For model definition there is **1 rule** to ensure good data integrity:
 
-> - Each Model should have one and only one field of type [`primary_key`](/reference/primary_key/) (`id` in this case)
+> - Each Model should have one and only one field of type [`primary_key`](reference/primary_key.md) (`id` in this case)
 
 If you try to use this, it will fail, as the main focus of the library is to interact with a DataBase, you need a DataBase connection, we'll use PostgreSQL for this example.
 
