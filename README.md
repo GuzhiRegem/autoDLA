@@ -84,3 +84,5 @@ print(id(user) === id(users[-1]))
 ```
 
 ---
+
+This is protected under MIT licence
