@@ -1,0 +1,33 @@
+site_name: AutoDLA
+repo_url: https://github.com/GuzhiRegem/autoDLA
+repo_name: autoDLA
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  language: es
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.top
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+nav:
+  - Introduction:
+      - Overview: index.md
+      - Installation: installation.md
+      - Basic Usage: basic_usage.md
+  - Reference:
+      - Dependencies: reference/dependencies_list.md
+      - Object: reference/object.md
