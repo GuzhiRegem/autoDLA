@@ -1,6 +1,7 @@
 import polars as pl
-from ..engine.data_conversion import DataTransformer
-from ..engine.query_builder import QueryBuilder
+from autodla.engine.data_conversion import DataTransformer
+from autodla.engine.query_builder import QueryBuilder
+from typing import get_origin, get_args
 
 class DB_Connection:
     __data_transformer : DataTransformer
@@ -41,6 +42,34 @@ class DB_Connection:
         for obj in ordered_objects:
             self.__classes[obj.__name__] = obj
             obj.set_db(self)
+    
+    def get_json_schema(self):
+        out = {}
+        for class_key, class_i in self.__classes.items():
+            class_def = class_i.get_types()
+            class_out = {}
+            for k, f in class_def.items():
+                class_out[k] = {}
+                if class_i.identifier_field == k:
+                    class_out[k]["primary_key"] = True
+                if "depends" in f:
+                    class_out[k]["depends"] = f'$ref:{f["depends"].__name__}'
+                if "is_list" in f:
+                    class_out[k]["is_list"] = f["is_list"]
+                if "nullable" in f:
+                    class_out[k]["nullable"] = f["nullable"]
+                type_st = f["type"].__name__
+                if get_origin(f['type']) == list:
+                    arg = get_args(f["type"])
+                    if len(arg) == 1:
+                        type_st += f'[{arg[0].__name__}]'
+                class_out[k]["type"] = type_st
+            out[class_key] = class_out
+        return out
+    
+    @property
+    def classes(self):
+        return self.__classes.values()
 
     def execute(self, query: str) -> pl.DataFrame:
         pass
@@ -62,7 +91,7 @@ class DB_Connection:
         print(current_data_schema)
         if data_schema == current_data_schema:
             return
-        schema = self.data_transformer.convert_data_schema(data_schema)
+        schema = self.data_transformer.convert_data_schema(schema)
         self.execute(self.query.drop_table(table_name, if_exists=True))
         qry = self.query.create_table(table_name, schema)
         self.execute(qry)

@@ -1,6 +1,7 @@
 from datetime import datetime, date
 from dataclasses import dataclass
-from typing import Callable, Any, Literal
+from types import NoneType
+from typing import Callable, Any, Literal, Optional, Union, get_args, get_origin
 import os
 
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -161,15 +162,21 @@ class DataTransformer:
 
     @classmethod
     def get_data_field(cls, v) -> DataConversion:
+        if get_origin(v) is Union:
+            a = get_args(v)
+            if a[1] is NoneType:
+                v = a[0]
         return cls.TYPE_DICT.get(v)
 
     @classmethod
     def convert_data_schema(cls, schema):
         out = {}
         for k, v in schema.items():
-            f = cls.get_data_field(v)
+            f = cls.get_data_field(v["type"])
             if f is not None:
                 out[k] = f.name
+                if v.get("nullable") != True:
+                    out[k] += " NOT NULL"
         return out
     
     @staticmethod

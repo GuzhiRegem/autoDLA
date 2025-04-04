@@ -1,36 +1,3 @@
-# AutoDLA
-
-A lightweight, powerful and modern ORM focused on simplifying development.
-
-[Documentation](https://autoDLA.readthedocs.io/en/latest/)
-
-## Installation
-
-### Using PyPi
-```bash
-pip install autodla
-```
-
-### From source
-```bash
-git clone https://github.com/GuzhiRegem/autoDLA.git
-cd autoDLA/
-pip install .
-```
-
-### Features
-
-To keep AutoDLA as lightweight as possible, you need to install separatelly the features you need to use, that includes the DataBase connection you are going to use, to install a feature, you can run the installation command as follows:
-```bash
-pip install autodla[<package_name>]
-```
-For example, PostgreSQL connection:
-```bash
-pip install autodla[db-postgres]
-```
-
-## How to use
-
 AutoDLA works with models, to start, you'll need to first build a usable model that inherits from [Object](reference/object.md):
 ```python
 from autodla import Object, primary_key
@@ -85,4 +52,4 @@ print(id(user) === id(users[-1]))
 
 ---
 
-This is protected under MIT licence
+This example is [available in the repository](https://github.com/GuzhiRegem/autoDLA/blob/main/examples/simple_usage.py)
