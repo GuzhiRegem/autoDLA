@@ -4,7 +4,7 @@ repo_name: autoDLA
 edit_uri: edit/main/docs/
 theme:
   name: material
-  language: es
+  language: en
   palette:
     - scheme: slate
       primary: indigo
@@ -15,6 +15,7 @@ theme:
     - navigation.top
 
 markdown_extensions:
+  - tables
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
@@ -28,6 +29,9 @@ nav:
       - Overview: index.md
       - Installation: installation.md
       - Basic Usage: basic_usage.md
+      - More Features: advanced_usage.md
+      - AutoDLA WEB: autodla_web.md
   - Reference:
       - Dependencies: reference/dependencies_list.md
       - Object: reference/object.md
+      - Primary key: reference/primary_key.md
