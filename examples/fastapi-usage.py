@@ -19,12 +19,10 @@ class Group(Object):
     group_name: str
     participants: list[User]
 
+
 # Connect to DB and register models
 db = PostgresDB()
 db.attach([User, Group])
-
-
-
 
 
 #setup DB
