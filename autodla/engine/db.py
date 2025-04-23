@@ -20,6 +20,18 @@ class DB_Connection:
     def data_transformer(self):
         return self.__data_transformer
     
+    def clean_db(self, DO_NOT_ASK=False):
+        if not DO_NOT_ASK:
+            print("Are you sure you want to clean the database? (y/n)")
+            answer = input()
+            if answer != "y":
+                raise Exception("User did not confirm the action")
+        print("Cleaning database...")
+        for class_i in self.__classes.values():
+            class_i.delete_all()
+        print("Database cleaned")
+
+    
     def get_table_definition(self, table_name) -> dict[str, type]:
         pass
     
