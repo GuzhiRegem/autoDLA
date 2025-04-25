@@ -120,6 +120,10 @@ class Table:
 			values=update_data
 		)
 		return self.db.execute(qry)
+	
+	def delete_all(self):
+		qry = self.db.query.delete(self.table_name, "TRUE")
+		self.db.execute(qry)
 
 class Object(BaseModel):
 	__table : ClassVar[Table] = None
@@ -127,6 +131,12 @@ class Object(BaseModel):
 	identifier_field : ClassVar[str] = "id"
 	__objects_list : ClassVar[List] = []
 	__objects_map : ClassVar[dict] = {}
+
+	@classmethod
+	def delete_all(cls):
+		cls.__objects_list = []
+		cls.__objects_map = {}
+		cls.__table.delete_all()
 
 	@classmethod
 	def set_db(cls, db : DB_Connection):

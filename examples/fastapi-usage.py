@@ -3,7 +3,7 @@ os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from fastapi import FastAPI
 from autodla import Object, primary_key
 from autodla.dbs import PostgresDB
-from autodla.connectors.fastapi import connect_db
+from autodla.connectors.fastapi import FastApiWebConnection
 from autodla.utils import DataGenerator
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
@@ -19,19 +19,14 @@ class Group(Object):
     group_name: str
     participants: list[User]
 
+
 # Connect to DB and register models
 db = PostgresDB()
 db.attach([User, Group])
 
 
-
-
-
 #setup DB
-for obj in User.all(limit=None):
-    obj.delete()
-for obj in Group.all(limit=None):
-    obj.delete()
+db.clean_db(DO_NOT_ASK=True)
 lis = []
 for i in range(2):
     lis.append(User.new(
@@ -53,4 +48,4 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-connect_db(app, db)
+conn = FastApiWebConnection(app, db)

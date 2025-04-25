@@ -1,0 +1,54 @@
+- New DB_Connection's:
+  - SQLiteDB
+  - MemoryDB #In memory database
+- Make FastAPI connector modular and add connector for Flask
+- Add children attribute access in filter:
+  - Example: (lambda x: all(y.age > 18 for y in x.participants))
+  - Possible solution: Fallback to pythonic filtering if not possible
+  - complex example: (lambda x: 3 <= len(y for y in x.participants if y.age >= 18)) #all Groups with 3+ participants aged 18 or older 
+- Make more DataTypes (Geometry, GeoLocation, etc.)
+- Async access when using class atributes:
+  - User.age ==> class attribute # not processed
+  - usr.age ==> instance attribute # processed
+  - sum(User.age) ==> int # its processed here
+  - sum((User.age < 18).age) ==> int # its processed here
+  - User.age > 18 ==> None # not processed
+  - usr.age > 18 ==> bool # processed
+- Transaction management:
+  - Combine context manager and Transaction management
+  - Usage:
+    - "with db.transaction() as transaction"
+    - if you run a query like usr.update() outside of a context manager, it commits the change automatically
+    - if you run a query inside a context manager, if it fails, it rolls back the transaction, else, it commits the transaction at the end
+- Add batch update and delete and insert:
+  - Example: User.update(lambda x: x.age > 18, {"age": 18})
+- Add metatypes for complex relationships:
+  - Example: items: Dependant[[Item]] #items exist in dependency of the parent and cascade delete
+- Migrations:
+  - Add migration cli tool that activates on detection of schema changes
+  - This tool shows differences between the current schema and the new schema
+  - This tool shows different migration strategies:
+    - First, it checks if the user wants to proceed with the migration
+    - Data Persistence:
+      - No, Drop the table and create a new one
+      - Yes, Change the table name to a temporary name and create the new empty table
+    - if the temp table is created, it will be dropped after the migration.
+    - in case of Data Persistence:
+      - Define for each new column a migration strategy:
+        - 4 cases are possible:
+          - 1. The column is the same as the old column
+          - 2. A column is added
+          - 3. A column is removed
+          - 4. A column is changed
+        - For this cases, we detect what case it is for each column and prompt the user for a migration strategy.
+        - For 1:
+          - we do nothing.
+        - For 2:
+          - a. Add the column with a defined value (can be a function based on the old table, like using the value of another column for column name change)
+          - b. Add the column with null (only if the column is nullable)
+        - For 3:
+          - a. Warn the user that the column will be dropped
+        - For 4:
+          - a. Change the column with a defined value (can be a function based on the old table, like using the value of another column for column name change)
+        - for cases 2.a and 4.a, the return type of the function is checked and checked if it is the same as the column type.
+  - All migration strategies are stored in a migration file and can be reused.
