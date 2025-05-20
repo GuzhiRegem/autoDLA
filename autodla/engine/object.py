@@ -398,7 +398,12 @@ class Object(BaseModel):
 		return out
 	
 	def update(self, **kwargs):
-		data = {**self.to_dict(), **kwargs}
+        data = {}
+        for key in self.__class__.model_fields:
+            if key in kwargs:
+                data[key] = kwargs[key]
+            else:
+                data[key] = getattr(self, key)
 		dla_data_insert = dla_dict("UPDATE", is_current=True)
 		for key, value in kwargs.items():
 			if key in self.__dependencies:
@@ -440,7 +445,12 @@ class Object(BaseModel):
 		self.__table.insert({**data, **dla_data_insert()})
 	
 	def delete(self):
-		data = {**self.to_dict()}
+        data = {}
+        for key in self.__class__.model_fields:
+            if key in kwargs:
+                data[key] = kwargs[key]
+            else:
+                data[key] = getattr(self, key)
 		dla_data_delete = dla_dict("DELETE", is_current=True, is_active=False)
 		for key, dependency in self.__dependencies.items():
 			del data[key]
