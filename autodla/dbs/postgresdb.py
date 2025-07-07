@@ -152,7 +152,7 @@ class PostgresDB(MemoryDB):
         for row in res:
             if row['data_type'] in conversion_dict:
                 row['data_type'] = conversion_dict[row['data_type']]
-            out[row['column_name'].upper()] = self.data_transformer.get_type_from_sql_type(row["data_type"])
+            out[row['column_name'].upper()] = self.__pg_dt.get_type_from_sql_type(row["data_type"])
         return out
                 
     def execute(self, statement, commit=True):
@@ -186,9 +186,27 @@ class PostgresDB(MemoryDB):
             for table, df in delta.items():
                 if df is None or len(df) == 0:
                     continue
-                values = df.to_dicts()
-                qry = self.__pg_query.insert(table, values).rstrip(';') + ' ON CONFLICT DO NOTHING;'
-                cursor.execute(qry)
+                for row in df.to_dicts():
+                    obj_id = row.get("DLA_object_id")
+                    if obj_id is not None:
+                        check_q = self.__pg_query.select(
+                            from_table=table,
+                            columns=["DLA_object_id"],
+                            where=f"DLA_object_id = '{obj_id}'",
+                            limit=1,
+                        )
+                        cursor.execute(check_q)
+                        if cursor.fetchone():
+                            update_vals = {k: v for k, v in row.items() if k != "DLA_object_id"}
+                            qry = self.__pg_query.update(
+                                table,
+                                values=update_vals,
+                                where=f"DLA_object_id = '{obj_id}'",
+                            )
+                            cursor.execute(qry)
+                            continue
+                    qry = self.__pg_query.insert(table, [row])
+                    cursor.execute(qry)
         self.__pg_connection.commit()
 
     def _reload_memory(self):
