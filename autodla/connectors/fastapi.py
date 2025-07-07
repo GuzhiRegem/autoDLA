@@ -11,13 +11,13 @@ import inspect
 class FastApiEndpointMaker(EndpointMaker):
     @classmethod
     def list(cls, object) -> Callable:
-        async def read_object(limit=10, filter:str=None):
+        async def read_object(limit=10, skip=0, filter:str=None):
             if filter is None:
-                res = object.all(limit)
+                res = object.all(limit, skip=skip)
             else:
                 filter_dict = json.loads(filter)
                 lambda_st = json_to_lambda_str(filter_dict)
-                res = object.filter(lambda_st, limit)
+                res = object.filter(lambda_st, limit, skip=skip)
             out = []
             for i in res:
                 out.append(i.to_dict())
@@ -44,8 +44,8 @@ class FastApiEndpointMaker(EndpointMaker):
 
     @classmethod
     def table(cls, object) -> Callable:
-        async def read_table(limit=10, only_current=True, only_active=True):
-            res = object.get_table_res(limit=limit, only_current=only_current, only_active=only_active).to_dicts()
+        async def read_table(limit=10, skip=0, only_current=True, only_active=True):
+            res = object.get_table_res(limit=limit, skip=skip, only_current=only_current, only_active=only_active).to_dicts()
             return res
         return read_table
 

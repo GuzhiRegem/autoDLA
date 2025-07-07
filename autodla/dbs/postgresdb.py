@@ -31,7 +31,7 @@ if "AUTODLA_SQL_VERBOSE" in os.environ:
 CONNECTION_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_URL}/{POSTGRES_DB}"
 
 class PostgresQueryBuilder(QueryBuilder):
-    def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None) -> pl.DataFrame:
+    def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None, offset: int = None) -> pl.DataFrame:
         qry = "SELECT " + ", ".join(columns) + " FROM " + from_table
         if where:
             qry += " WHERE " + where
@@ -39,6 +39,8 @@ class PostgresQueryBuilder(QueryBuilder):
             qry += " ORDER BY " + order_by
         if limit:
             qry += " LIMIT " + str(limit)
+        if offset:
+            qry += " OFFSET " + str(offset)
         return qry
 
     def insert(self, into_table: str, values: List[dict]) -> None:

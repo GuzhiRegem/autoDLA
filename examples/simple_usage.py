@@ -21,7 +21,7 @@ user = User.new(name="John", age=30)
 print("new user:", user)
 
 # Retrieve all users
-users = User.all(limit=None)
+users = User.all(limit=None, skip=0)
 for user in users:
     print(user)
 
