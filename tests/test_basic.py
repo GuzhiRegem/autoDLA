@@ -13,6 +13,11 @@ class Team(Object):
     participants: list[User]
     group_name: str
 
+class Item(Object):
+    id: primary_key = primary_key.auto_increment()
+    name: str
+    tags: list[str]
+
 @pytest.fixture
 def db(monkeypatch):
     from autodla.engine import object as engine_object
@@ -36,10 +41,11 @@ def db(monkeypatch):
     monkeypatch.setattr(engine_object.Table, "__init__", init)
     monkeypatch.setattr(engine_object.Table, "update", tbl_update)
     db = MemoryDB()
-    db.attach([User, Team])
+    db.attach([User, Team, Item])
     yield db
     User.delete_all()
     Team.delete_all()
+    Item.delete_all()
     monkeypatch.setattr(engine_object.Table, "__init__", original_init)
     monkeypatch.setattr(engine_object.Table, "update", original_update)
 
@@ -72,3 +78,69 @@ def test_group_relationship(db):
     grp = Team.new(participants=[u1], group_name="Group1")
     groups = Team.all(limit=None)
     assert groups[0].participants[0] is u1
+
+
+def test_history_tracks_updates(db):
+    user = User.new(name="Hist", age=20)
+    user.update(age=21)
+    history = user.history()
+    assert len(history["self"]) == 2
+    operations = [row["DLA_operation"] for row in history["self"]]
+    assert operations[0] == "INSERT" and operations[1] == "UPDATE"
+
+
+def test_get_table_res_only_current(db):
+    user = User.new(name="Table", age=22)
+    user.update(age=23)
+    current = User.get_table_res(limit=None)
+    full = User.get_table_res(limit=None, only_current=False, only_active=False)
+    assert len(current.to_dicts()) == 1
+    assert len(full.to_dicts()) == 2
+
+
+def test_list_value_dependency(db):
+    item = Item.new(name="Item1", tags=["a", "b"])
+    item.update(tags=["a", "c"])
+    assert item.tags == ["a", "c"]
+    hist = item.history()
+    assert len(hist["self"]) == 2
+    assert len(hist["dependencies"]["tags"]) == 4
+
+
+def test_delete_preserves_history(db):
+    user = User.new(name="Del", age=40)
+    user.delete()
+    assert User.all(limit=None) == []
+    hist = user.history()
+    assert len(hist["self"]) == 2
+    assert hist["self"][1]["DLA_operation"] == "DELETE"
+    assert hist["self"][1]["DLA_is_active"] == 0
+
+
+def test_complex_filtering(db):
+    User.new(name="Alice", age=32)
+    User.new(name="Bob", age=26)
+    User.new(name="Charlie", age=40)
+    res = User.filter(lambda x: (x.age >= 30 or x.age <= 20) and (x.age != 26), limit=None)
+    assert len(res) == 2
+    names = sorted([u.name for u in res])
+    assert names == ["Alice", "Charlie"]
+
+
+def test_object_identity_consistency(db):
+    user = User.new(name="Ident", age=50)
+    from_all = User.all(limit=None)[0]
+    by_id = User.get_by_id(user.id)
+    assert from_all is user
+    assert by_id is user
+
+
+def test_team_update_participants_history(db):
+    u1 = User.new(name="U1", age=20)
+    u2 = User.new(name="U2", age=22)
+    team = Team.new(participants=[u1], group_name="G1")
+    team.update(participants=[u1, u2])
+    assert team.participants == [u1, u2]
+    hist = team.history()
+    assert len(hist["self"]) == 2
+    assert len(hist["dependencies"]["participants"]) == 3
