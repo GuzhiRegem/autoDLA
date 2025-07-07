@@ -74,7 +74,7 @@ user = User.new(name="John", age=30)
 
 #### Retrieve all users
 ```python
-users = User.all(limit=None)
+users = User.all(limit=None, skip=0)
 ```
 
 #### Integrity of python id for the percieved same object

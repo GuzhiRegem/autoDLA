@@ -77,7 +77,7 @@ class Table:
 		self.__db.ensure_table(self.table_name, self.schema)
 		self.__table_alias = "".join(self.table_name.split('.'))
 	
-	def get_all(self, limit=10, only_current=True, only_active=True):
+	def get_all(self, limit=10, only_current=True, only_active=True, skip=0):
 		conditions = ["TRUE"]
 		if only_current:
 			conditions.append("DLA_is_current = true")
@@ -88,11 +88,12 @@ class Table:
 			from_table=f'{self.table_name} {self.__table_alias}',
 			columns=[f'{self.__table_alias}.{i}' for i in list(self.schema.keys())],
 			where=where_st,
-			limit=limit
+			limit=limit,
+			offset=skip
 		)
 		return self.db.execute(qry)
-	
-	def filter(self, l_func, limit=10, only_current=True, only_active=True):
+
+	def filter(self, l_func, limit=10, only_current=True, only_active=True, skip=0):
 		conditions = [lambda_to_sql(self.schema, l_func, self.__db.data_transformer, alias=self.__table_alias)]
 		if only_current:
 			conditions.append("DLA_is_current = true")
@@ -103,7 +104,8 @@ class Table:
 			from_table=f'{self.table_name} {self.__table_alias}',
 			columns=[f'{self.__table_alias}.{i}' for i in list(self.schema.keys())],
 			where=where_st,
-			limit=limit
+			limit=limit,
+			offset=skip
 		)
 		return self.db.execute(qry)
 	
@@ -275,11 +277,11 @@ class Object(BaseModel):
 		return obj
 	
 	@classmethod
-	def __update_info(cls, filter = None, limit=10, only_current=True, only_active=True):
+	def __update_info(cls, filter = None, limit=10, skip=0, only_current=True, only_active=True):
 		if filter is None:
-			res = cls.__table.get_all(limit, only_current, only_active)
+			res = cls.__table.get_all(limit, only_current, only_active, skip=skip)
 		else:
-			res = cls.__table.filter(filter, limit, only_current, only_active)
+			res = cls.__table.filter(filter, limit, only_current, only_active, skip=skip)
 		obj_lis = res.to_dicts()
 		if obj_lis == []:
 			return []
@@ -493,23 +495,23 @@ class Object(BaseModel):
 
 
 	@classmethod
-	def all(cls, limit=10):
-		out = cls.__update_info(limit=limit)
+	def all(cls, limit=10, skip=0):
+		out = cls.__update_info(limit=limit, skip=skip)
 		return out
-	
+
 	@classmethod
-	def filter(cls, lambda_f, limit=10):
-		out = cls.__update_info(filter=lambda_f, limit=limit)
+	def filter(cls, lambda_f, limit=10, skip=0):
+		out = cls.__update_info(filter=lambda_f, limit=limit, skip=skip)
 		return out
 	
 	@classmethod
 	def get_by_id(cls, id_param):
-		cls.__update_info(lambda x: x[cls.identifier_field] == id_param, limit=1)
+		cls.__update_info(lambda x: x[cls.identifier_field] == id_param, limit=1, skip=0)
 		return cls.__objects_map.get(id_param)
 	
 	@classmethod
-	def get_table_res(cls, limit=10, only_current=True, only_active=True) -> pl.DataFrame:
-		return cls.__table.get_all(limit=limit, only_current=only_current, only_active=only_active)
+	def get_table_res(cls, limit=10, skip=0, only_current=True, only_active=True) -> pl.DataFrame:
+		return cls.__table.get_all(limit=limit, only_current=only_current, only_active=only_active, skip=skip)
 	
 	def to_dict(self):
 		return self.model_dump()
