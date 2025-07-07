@@ -1,6 +1,5 @@
 - New DB_Connection's:
-  - SQLiteDB
-  - MemoryDB #In memory database
+- MemoryDB #In memory database using SQLite
 - Make FastAPI connector modular and add connector for Flask
 - Add children attribute access in filter:
   - Example: (lambda x: all(y.age > 18 for y in x.participants))

@@ -9,7 +9,7 @@ pip install autodla[fastapi] #install dependency
 And the next schema:
 ```python
 from autodla import Object, primary_key
-from autodla.dbs import PostgresDB
+from autodla.dbs import PostgresDB, MemoryDB
 
 class User(Object):
     id: primary_key = primary_key.auto_increment()
@@ -21,7 +21,7 @@ class Group(Object):
     group_name: str
     participants: list[User]
 
-db = PostgresDB()
+db = MemoryDB()  # or PostgresDB()
 db.attach([User, Group])
 ```
 We create the data:

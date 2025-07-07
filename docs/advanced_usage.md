@@ -3,14 +3,14 @@ AutoDLA includes a variety of features to improve quality of life for the develo
 Let's create a base Object called `User` and work with it in this page to explore different concepts:
 ```python
 from autodla import Object, primary_key
-from autodla.dbs import PostgresDB
+from autodla.dbs import PostgresDB, MemoryDB
 
 class User(Object):
     id: primary_key = primary_key.auto_increment()
     name: str
     age: int
 
-db = PostgresDB()
+db = MemoryDB()  # or PostgresDB()
 db.attach([User])
 
 ```

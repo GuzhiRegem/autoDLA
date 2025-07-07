@@ -28,6 +28,8 @@ For example, PostgreSQL connection:
 ```bash
 pip install autodla[db-postgres]
 ```
+MemoryDB comes bundled with AutoDLA for quick prototyping without any external
+dependencies.
 
 ## How to use
 
@@ -53,9 +55,10 @@ pip install autodla[db-postgres] #install db connector
 We need to instanciate the DataBase and then attach the Model into it.
 
 ```python
-from autodla.dbs import PostgresDB
+from autodla.dbs import PostgresDB, MemoryDB
 
-db = PostgresDB()
+# Use PostgresDB() or the in-memory MemoryDB() depending on your setup
+db = MemoryDB()
 db.attach([User])
 ```
 

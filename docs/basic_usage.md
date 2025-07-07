@@ -20,9 +20,9 @@ pip install autodla[db-postgres] #install db connector
 We need to instanciate the DataBase and then attach the Model into it.
 
 ```python
-from autodla.dbs import PostgresDB
+from autodla.dbs import PostgresDB, MemoryDB
 
-db = PostgresDB()
+db = MemoryDB()  # or PostgresDB()
 db.attach([User])
 ```
 
@@ -52,4 +52,4 @@ print(id(user) === id(users[-1]))
 
 ---
 
-This example is [available in the repository](https://github.com/GuzhiRegem/autoDLA/blob/main/examples/simple_usage.py)
+This example is [available in the repository](https://github.com/GuzhiRegem/autoDLA/blob/main/examples/memorydb_usage.py)
