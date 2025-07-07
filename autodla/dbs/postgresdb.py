@@ -8,6 +8,9 @@ from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 import os
+import time
+import threading
+from .memorydb import MemoryDB
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
@@ -114,22 +117,33 @@ class PostgresDataTransformer(DataTransformer):
         UUID: primary_key
     }
 
-class PostgresDB(DB_Connection):
+class PostgresDB(MemoryDB):
 
-    def __init__(self, connection_url=CONNECTION_URL):
-        self.__db_connection = psycopg2.connect(connection_url)
-        dt = PostgresDataTransformer()
-        super().__init__(dt, PostgresQueryBuilder(dt))
+    def __init__(self, connection_url=CONNECTION_URL, sync_interval: int = 5):
+        super().__init__()
+        self.__pg_connection = psycopg2.connect(connection_url)
+        self.__pg_dt = PostgresDataTransformer()
+        self.__pg_query = PostgresQueryBuilder(self.__pg_dt)
+        self.__last_snapshot = self._snapshot_tables()
+        self.__last_sync = time.time()
+        self.__sync_interval = sync_interval
+        self.__sync_thread = threading.Thread(target=self.__sync_loop, daemon=True)
+        self.__sync_thread.start()
     
     def get_table_definition(self, table_name) -> dict[str, type]:
         if "." in table_name:
             table_name = table_name.split(".")[-1]
-        res = self.execute(self.query.select(
+        qry = self.__pg_query.select(
             from_table='INFORMATION_SCHEMA.COLUMNS',
             columns=["column_name", "data_type"],
             limit=None,
             where=f"table_name = '{table_name}'"
-        )).to_dicts()
+        )
+        with self.__pg_connection.cursor() as cursor:
+            cursor.execute(qry)
+            res = cursor.fetchall()
+            schema_cols = [d[0] for d in cursor.description]
+            res = [dict(zip(schema_cols, r)) for r in res]
         conversion_dict = {
             "boolean": "bool",
             "timestamp without time zone": "timestamp"
@@ -142,26 +156,70 @@ class PostgresDB(DB_Connection):
         return out
                 
     def execute(self, statement, commit=True):
-        statement = self.normalize_statment(statement)
-        with self.__db_connection.cursor() as cursor:
-            if VERBOSE:
-                print()
-                print("$$$$$$ SQL STATEMENT $$$$$$")
-                print(statement)
-            cursor.execute(statement)
-            try:
+        if time.time() - self.__last_sync > self.__sync_interval:
+            self.synchronize()
+        return super().execute(statement, commit)
+
+    def _snapshot_tables(self) -> dict:
+        cursor = self._MemoryDB__db_connection.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [r[0] for r in cursor.fetchall()]
+        snap = {}
+        for t in tables:
+            df = super().execute(f"SELECT * FROM {t}")
+            snap[t] = df if df is not None else pl.DataFrame()
+        return snap
+
+    def _compute_delta(self, old: dict, new: dict) -> dict:
+        delta = {}
+        for t, df_new in new.items():
+            df_old = old.get(t)
+            if df_old is None or len(df_old) == 0:
+                delta[t] = df_new
+            else:
+                diff = df_new.join(df_old, on=df_new.columns, how='anti')
+                delta[t] = diff
+        return delta
+
+    def _sync_to_postgres(self, delta: dict):
+        with self.__pg_connection.cursor() as cursor:
+            for table, df in delta.items():
+                if df is None or len(df) == 0:
+                    continue
+                values = df.to_dicts()
+                qry = self.__pg_query.insert(table, values).rstrip(';') + ' ON CONFLICT DO NOTHING;'
+                cursor.execute(qry)
+        self.__pg_connection.commit()
+
+    def _reload_memory(self):
+        with self.__pg_connection.cursor() as cursor:
+            m_cursor = self._MemoryDB__db_connection.cursor()
+            m_cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [r[0] for r in m_cursor.fetchall()]
+            for t in tables:
+                super().execute(f"DELETE FROM {t}")
+                cursor.execute(f"SELECT * FROM {t}")
                 rows = cursor.fetchall()
-                schema = [desc[0] for desc in cursor.description]
-                out = pl.DataFrame(rows, schema=schema, orient='row')
-                if VERBOSE:
-                    print()
-                    print(out)
-                return out
-            except:
-                return None
-            finally:
-                if commit:
-                    self.__db_connection.commit()
-                if VERBOSE:
-                    print("$$$$$$$$$$$$$")
-                    print()
+                if not rows:
+                    continue
+                columns = [d[0] for d in cursor.description]
+                values = [dict(zip(columns, r)) for r in rows]
+                qry = self.query.insert(t, values)
+                super().execute(qry)
+
+    def synchronize(self):
+        new_snap = self._snapshot_tables()
+        delta = self._compute_delta(self.__last_snapshot, new_snap)
+        self._sync_to_postgres(delta)
+        self._reload_memory()
+        self.__last_snapshot = self._snapshot_tables()
+        self.__last_sync = time.time()
+
+    def __sync_loop(self):
+        while True:
+            time.sleep(self.__sync_interval)
+            try:
+                self.synchronize()
+            except Exception:
+                pass
+
