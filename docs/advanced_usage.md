@@ -10,6 +10,8 @@ class User(Object):
     name: str
     age: int
 
+# MemoryDB stores everything in RAM. PostgresDB uses SQLite locally and
+# syncs changes to PostgreSQL.
 db = MemoryDB()  # or PostgresDB()
 db.attach([User])
 

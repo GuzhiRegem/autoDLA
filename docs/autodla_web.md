@@ -21,6 +21,8 @@ class Group(Object):
     group_name: str
     participants: list[User]
 
+# MemoryDB works only in-memory. PostgresDB keeps data in SQLite and
+# synchronizes with PostgreSQL.
 db = MemoryDB()  # or PostgresDB()
 db.attach([User, Group])
 ```

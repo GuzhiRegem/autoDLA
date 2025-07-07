@@ -22,6 +22,8 @@ We need to instanciate the DataBase and then attach the Model into it.
 ```python
 from autodla.dbs import PostgresDB, MemoryDB
 
+# MemoryDB is purely in-memory. PostgresDB keeps a local SQLite store and
+# automatically syncs it to PostgreSQL.
 db = MemoryDB()  # or PostgresDB()
 db.attach([User])
 ```

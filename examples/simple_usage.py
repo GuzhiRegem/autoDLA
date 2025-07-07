@@ -11,7 +11,8 @@ class User(Object):
     age: int
 
 
-# Connect to DB and register models
+# Connect to DB and register models. PostgresDB keeps a local SQLite store
+# and periodically syncs to the PostgreSQL server.
 db = PostgresDB()
 db.attach([User])
 
