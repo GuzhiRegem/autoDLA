@@ -6,7 +6,7 @@ class QueryBuilder:
     def __init__(self, data_transformer = DataTransformer):
         self._data_transformer = data_transformer
 
-    def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None) -> pl.DataFrame:
+    def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None, offset: int = None) -> pl.DataFrame:
         pass
 
     def insert(self, into_table: str, values: List[dict]) -> None:

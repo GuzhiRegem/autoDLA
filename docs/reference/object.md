@@ -2,13 +2,13 @@
 ### Class Methods
 - > #### **new(`**kwargs: dict`)** -> `Object`
 > Creates a new instance of Object based on the arguments passed
-- > #### **all(`limit: int = 10`)** -> `list[Object]`
-> Get a list with all currently active Object instances
-- > #### **filter(`lambda_f: LambdaFunction`, `limit: int = 10`)** -> `list[Object]`
-> Get a list with all currently active Object instances that fullfill the condition passed in `lambda_f`
+- > #### **all(`limit: int = 10`, `skip: int = 0`)** -> `list[Object]`
+> Get a list with all currently active Object instances, skipping `skip` rows
+- > #### **filter(`lambda_f: LambdaFunction`, `limit: int = 10`, `skip: int = 0`)** -> `list[Object]`
+> Get a list with all currently active Object instances that fullfill the condition passed in `lambda_f`, skipping `skip` rows
 - > #### **get_by_id(`id_param: str`)** -> `Object`
 > Returns the active Object instance that has the specified id
-- > #### **get_table_res(`limit: int = 10`, `only_current: bool = True`, `only_active: bool = True`)** -> `list[dict]`
+- > #### **get_table_res(`limit: int = 10`, `skip: int = 0`, `only_current: bool = True`, `only_active: bool = True`)** -> `list[dict]`
 > Returns a list of dicts representing the table containing the data for all Object instances
 ### Instance Methods
 - > #### **update(`**kwargs: dict`)** -> `None`

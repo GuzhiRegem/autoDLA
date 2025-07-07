@@ -27,6 +27,6 @@ for i in range(2):
     print("added:", n)
 
 # Retrieve all users
-users = User.all(limit=None)
+users = User.all(limit=None, skip=0)
 for user in users:
     print(user)
