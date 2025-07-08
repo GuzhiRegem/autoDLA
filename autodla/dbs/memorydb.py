@@ -1,7 +1,7 @@
 import sqlite3
 import polars as pl
 from autodla.engine.data_conversion import DataTransformer, DataConversion
-from autodla.engine.db import DB_Connection
+from autodla.engine.db import DB_Connection, TableName
 from autodla.engine.query_builder import QueryBuilder
 from autodla.engine.object import primary_key
 from datetime import date, datetime
@@ -103,7 +103,11 @@ class MemoryDB(DB_Connection):
     def __init__(self):
         self.__db_connection = sqlite3.connect(":memory:")
         dt = MemoryDataTransformer()
+        self.tables = {}
         super().__init__(dt, MemoryQueryBuilder(dt))
+
+    def get_table_name(self, table_name: str) -> TableName:
+        return TableName(name=f'"{table_name.upper()}"', alias=f'"{table_name.lower()}"')
 
     def get_table_definition(self, table_name) -> dict[str, type]:
         cursor = self.__db_connection.cursor()
@@ -142,3 +146,10 @@ class MemoryDB(DB_Connection):
             if VERBOSE:
                 print("$$$$$$$$$$$$$")
                 print()
+    
+    def snapshot_tables(self):
+        out = {}
+        for table, schema in self.__table_schemas.items():
+            qry = self.query.select(from_table=self.get_table_name(table), columns=list(schema.keys()), limit=None)
+            out[table] = self.execute(qry)
+        return out

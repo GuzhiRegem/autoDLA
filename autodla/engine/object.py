@@ -58,7 +58,9 @@ def dla_dict(operation : Literal["INSERT", "UPDATE", "DELETE"], modified_at=date
 
 class Table:
 	def __init__(self, table_name : str, schema : dict, db : DB_Connection = None):
-		self.table_name = "public." + table_name
+		table_name = db.get_table_name(table_name)
+		self.table_name = table_name.name
+		self.__table_alias = table_name.alias
 		self.schema = schema
 		if db:
 			self.set_db(db)
@@ -75,7 +77,6 @@ class Table:
 			raise ValueError("DB not defined")
 		self.__db = db
 		self.__db.ensure_table(self.table_name, self.schema)
-		self.__table_alias = "".join(self.table_name.split('.'))
 	
 	def get_all(self, limit=10, only_current=True, only_active=True, skip=0):
 		conditions = ["TRUE"]

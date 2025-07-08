@@ -2,7 +2,7 @@ import os
 os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from fastapi import FastAPI
 from autodla import Object, primary_key
-from autodla.dbs import PostgresDB
+from autodla.dbs import MemoryDB
 from autodla.connectors.fastapi import FastApiWebConnection
 from autodla.utils import DataGenerator
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,9 +20,9 @@ class Group(Object):
     participants: list[User]
 
 
-# Connect to DB and register models. PostgresDB keeps a local SQLite store
+# Connect to DB and register models. MemoryDB keeps a local SQLite store
 # and periodically syncs to the PostgreSQL server.
-db = PostgresDB()
+db = MemoryDB()
 db.attach([User, Group])
 
 

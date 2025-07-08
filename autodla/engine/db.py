@@ -1,16 +1,23 @@
 import polars as pl
+from pydantic import BaseModel
 from autodla.engine.data_conversion import DataTransformer
 from autodla.engine.query_builder import QueryBuilder
 from typing import get_origin, get_args
 
+class TableName(BaseModel):
+    name: str
+    alias: str
+
 class DB_Connection:
     __data_transformer : DataTransformer
     __query : QueryBuilder
-    __classes = {}
 
     def __init__(self, data_transformer, query):
         self.__data_transformer = data_transformer
         self.__query = query
+        self.__classes = {}
+        self.__table_schemas = {}
+        self.__tables = []
 
     @property
     def query(self):
@@ -19,6 +26,13 @@ class DB_Connection:
     @property
     def data_transformer(self):
         return self.__data_transformer
+    
+    def get_table_name(self, table_name: str) -> TableName:
+        """
+        Returns the table name in uppercase.
+        This is used to ensure that the table names are consistent with the SQL standard.
+        """
+        return TableName(name=table_name.upper(), alias=table_name.lower())
     
     def clean_db(self, DO_NOT_ASK=False):
         if not DO_NOT_ASK:
@@ -95,6 +109,8 @@ class DB_Connection:
         return statement
     
     def ensure_table(self, table_name, schema):
+        self.__table_schemas[table_name] = schema
+        self.__tables.append(table_name)
         data_schema = {k.upper(): v["type"] for k, v in schema.items()}
         current_data_schema = self.get_table_definition(table_name)
         if all([self.data_transformer.check_type_compatibilty(data_schema.get(k), current_data_schema.get(k)) for k in list(set(data_schema.keys()).union(set(data_schema.keys())))]):

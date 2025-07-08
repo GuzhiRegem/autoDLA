@@ -1,7 +1,7 @@
 import os
 os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from autodla import Object, primary_key
-from autodla.dbs import PostgresDB
+from autodla.dbs import MemoryDB
 
 
 # Create models
@@ -16,9 +16,9 @@ class Group(Object):
     group_name: str
 
 
-# Connect to DB and register models. PostgresDB keeps a local SQLite store
+# Connect to DB and register models. MemoryDB keeps a local SQLite store
 # and periodically syncs to the PostgreSQL server.
-db = PostgresDB()
+db = MemoryDB()
 db.attach([User, Group])
 
 

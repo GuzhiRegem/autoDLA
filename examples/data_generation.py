@@ -1,7 +1,7 @@
 import os
 os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from autodla import Object, primary_key
-from autodla.dbs import PostgresDB
+from autodla.dbs import MemoryDB
 from autodla.utils import DataGenerator
 
 
@@ -12,9 +12,8 @@ class User(Object):
     age: int
 
 
-# Connect to DB and register models. PostgresDB keeps a local SQLite store
-# and periodically syncs to the PostgreSQL server.
-db = PostgresDB()
+# Connect to DB and register models. MemoryDB keeps a local SQLite store
+db = MemoryDB()
 db.attach([User])
 
 
