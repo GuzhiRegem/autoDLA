@@ -8,6 +8,7 @@ from autodla.engine.db import DB_Connection
 from autodla.engine.lambda_conversion import lambda_to_sql
 from pydantic import BaseModel, GetCoreSchemaHandler, TypeAdapter
 from pydantic_core import CoreSchema, core_schema, PydanticUndefinedType
+from autodla.utils.logger import logger
 import warnings
 warnings.filterwarnings('error')
 
@@ -58,7 +59,9 @@ def dla_dict(operation : Literal["INSERT", "UPDATE", "DELETE"], modified_at=date
 
 class Table:
 	def __init__(self, table_name : str, schema : dict, db : DB_Connection = None):
-		self.table_name = "public." + table_name
+		table_name_res = db.get_table_name(table_name)
+		self.table_name = table_name
+		self.__table_alias = table_name_res.alias
 		self.schema = schema
 		if db:
 			self.set_db(db)
@@ -74,8 +77,7 @@ class Table:
 		if db is None:
 			raise ValueError("DB not defined")
 		self.__db = db
-		self.__db.ensure_table(self.table_name, self.schema)
-		self.__table_alias = "".join(self.table_name.split('.'))
+		self.__db.ensure_table(self.table_name, self.schema, save=True)
 	
 	def get_all(self, limit=10, only_current=True, only_active=True, skip=0):
 		conditions = ["TRUE"]
@@ -85,7 +87,7 @@ class Table:
 			conditions.append("DLA_is_active = true")
 		where_st = " AND ".join(conditions)
 		qry = self.db.query.select(
-			from_table=f'{self.table_name} {self.__table_alias}',
+			from_table=f'{self.__db.get_table_name(self.table_name).name} {self.__table_alias}',
 			columns=[f'{self.__table_alias}.{i}' for i in list(self.schema.keys())],
 			where=where_st,
 			limit=limit,
@@ -101,7 +103,7 @@ class Table:
 			conditions.append("DLA_is_active = true")
 		where_st = " AND ".join(conditions)
 		qry = self.db.query.select(
-			from_table=f'{self.table_name} {self.__table_alias}',
+			from_table=f'{self.__db.get_table_name(self.table_name).name} {self.__table_alias}',
 			columns=[f'{self.__table_alias}.{i}' for i in list(self.schema.keys())],
 			where=where_st,
 			limit=limit,
@@ -110,21 +112,21 @@ class Table:
 		return self.db.execute(qry)
 	
 	def insert(self, data : dict):
-		qry = self.db.query.insert(self.table_name, [data])
+		qry = self.db.query.insert(self.__db.get_table_name(self.table_name).name, [data])
 		self.db.execute(qry)
 	
 	def update(self, l_func, data):
-		where_st = lambda_to_sql(self.schema, l_func, self.__db.data_transformer, alias=self.__table_alias)
+		where_st = lambda_to_sql(self.schema, l_func, self.__db.data_transformer, alias="")
 		update_data = {f'{key}': value for key, value in data.items()}
 		qry = self.db.query.update(
-			f'{self.table_name} {self.__table_alias}',
+			f'{self.__db.get_table_name(self.table_name).name}',
 			where=where_st,
 			values=update_data
 		)
 		return self.db.execute(qry)
 	
 	def delete_all(self):
-		qry = self.db.query.delete(self.table_name, "TRUE")
+		qry = self.db.query.delete(self.__db.get_table_name(self.table_name).name, "TRUE")
 		self.db.execute(qry)
 
 class Object(BaseModel):
@@ -257,7 +259,7 @@ class Object(BaseModel):
 	
 	@classmethod
 	def __update_individual(cls, data_inp):
-		print("UPDATE INDIVIDUAL", cls, data_inp)
+		logger.debug(f"UPDATE INDIVIDUAL: {cls} {data_inp}")
 		data = {}
 		for k, v in data_inp.items():
 			if not k.upper().startswith("DLA_"):
@@ -266,7 +268,7 @@ class Object(BaseModel):
 		try:
 			cls.model_validate(data)
 		except Exception as e:
-			print(e)
+			logger.error(f"Validation error for {cls.__name__} with data {data}: {e}")
 			return None
 		if found is not None:
 			found.__dict__.update(data)

@@ -1,16 +1,33 @@
 import polars as pl
+from pydantic import BaseModel
 from autodla.engine.data_conversion import DataTransformer
 from autodla.engine.query_builder import QueryBuilder
 from typing import get_origin, get_args
+from autodla.utils.logger import logger
+
+
+class TableName(BaseModel):
+    name: str
+    alias: str
 
 class DB_Connection:
     __data_transformer : DataTransformer
     __query : QueryBuilder
-    __classes = {}
+
+    @property
+    def usage_metrics(self):
+        """
+        Returns the usage metrics of the database connection.
+        This is a placeholder method and should be implemented in subclasses.
+        """
+        raise NotImplementedError("This method should be implemented in subclasses.")
 
     def __init__(self, data_transformer, query):
         self.__data_transformer = data_transformer
         self.__query = query
+        self.__classes = {}
+        self._table_schemas = {}
+        self._tables = []
 
     @property
     def query(self):
@@ -20,16 +37,23 @@ class DB_Connection:
     def data_transformer(self):
         return self.__data_transformer
     
+    def get_table_name(self, table_name: str) -> TableName:
+        """
+        Returns the table name in uppercase.
+        This is used to ensure that the table names are consistent with the SQL standard.
+        """
+        return TableName(name=table_name.upper(), alias=table_name.lower())
+    
     def clean_db(self, DO_NOT_ASK=False):
         if not DO_NOT_ASK:
-            print("Are you sure you want to clean the database? (y/n)")
+            logger.debug("Are you sure you want to clean the database? (y/n)")
             answer = input()
             if answer != "y":
                 raise Exception("User did not confirm the action")
-        print("Cleaning database...")
+        logger.debug("Cleaning database...")
         for class_i in self.__classes.values():
             class_i.delete_all()
-        print("Database cleaned")
+        logger.debug("Database cleaned")
 
     
     def get_table_definition(self, table_name) -> dict[str, type]:
@@ -94,13 +118,18 @@ class DB_Connection:
             statement += ";"
         return statement
     
-    def ensure_table(self, table_name, schema):
+    def ensure_table(self, table_name, schema, save=False, current_data_schema=None):
+        logger.debug("ENSURE TABLE DBCONNECTION")
+        if save:
+            self._table_schemas[table_name] = schema
+            self._tables.append(table_name)
         data_schema = {k.upper(): v["type"] for k, v in schema.items()}
-        current_data_schema = self.get_table_definition(table_name)
+        if current_data_schema is None:
+            current_data_schema = self.get_table_definition(table_name)
         if all([self.data_transformer.check_type_compatibilty(data_schema.get(k), current_data_schema.get(k)) for k in list(set(data_schema.keys()).union(set(data_schema.keys())))]):
             return
-        print(data_schema)
-        print(current_data_schema)
+        logger.debug(data_schema)
+        logger.debug(current_data_schema)
         if data_schema == current_data_schema:
             return
         schema = self.data_transformer.convert_data_schema(schema)

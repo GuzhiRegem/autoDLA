@@ -1,19 +1,20 @@
 import sqlite3
 import polars as pl
 from autodla.engine.data_conversion import DataTransformer, DataConversion
-from autodla.engine.db import DB_Connection
+from autodla.engine.db import DB_Connection, TableName
 from autodla.engine.query_builder import QueryBuilder
 from autodla.engine.object import primary_key
+from autodla.utils.logger import logger
 from datetime import date, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 import os
+import time
+
+import threading
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
     DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
-VERBOSE = False
-if "AUTODLA_SQL_VERBOSE" in os.environ:
-    VERBOSE = os.environ.get("AUTODLA_SQL_VERBOSE")
 
 class MemoryQueryBuilder(QueryBuilder):
     def select(self, from_table: str, columns: list[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None, offset: int = None) -> str:
@@ -99,46 +100,110 @@ class MemoryDataTransformer(DataTransformer):
         UUID: primary_key
     }
 
+import atexit
+
 class MemoryDB(DB_Connection):
     def __init__(self):
-        self.__db_connection = sqlite3.connect(":memory:")
+        self.query_queue = []
+        self.result_queue = {}
+        self.lock = threading.Lock()
+        self.db_status = {"connected": False}
+        threading.Thread(target=self.pooling_queue).start()
+        while True:
+            time.sleep(0.1)
+            with self.lock:
+                if self.db_status["connected"]:
+                    break
         dt = MemoryDataTransformer()
+        self.tables = {}
         super().__init__(dt, MemoryQueryBuilder(dt))
+        self.__querys_executed_memory = 0
+    
+    @property
+    def usage_metrics(self):
+        """
+        Returns the usage metrics of the MemoryDB connection.
+        This is a placeholder method and should be implemented in subclasses.
+        """
+        return {"memorydb": self.__querys_executed_memory}
+    
+    def exit(self):
+        with self.lock:
+            if self.query_queue is not None:
+                logger.debug("Closing MemoryDB connection...")
+                self.query_queue = None
+
+    
+    def pooling_queue(self):
+        self.__db_connection = sqlite3.connect(":memory:")
+        with self.lock:
+            self.db_status["connected"] = True
+        while True:
+            if self.query_queue is None:
+                break
+            if self.query_queue:
+                with self.lock:
+                    query = self.query_queue.pop(0)
+                    self.result_queue[query["execution_id"]] = self._execute_memory(**{"statement_input": query["statement"], "commit": query["commit"]})
+            else:
+                time.sleep(0.1)
+
+    def get_table_name(self, table_name: str) -> TableName:
+        return TableName(name=f'"{table_name.upper()}"', alias=f'"{table_name.lower()}"')
+    
+    def attach(self, objects):
+        logger.debug("Attaching objects to MemoryDB...\n")
+        super().attach(objects)
+        logger.debug("Attached objects to MemoryDB...\n")
 
     def get_table_definition(self, table_name) -> dict[str, type]:
-        cursor = self.__db_connection.cursor()
-        cursor.execute(f"PRAGMA table_info('{table_name.split('.')[-1]}')")
-        rows = cursor.fetchall()
-        out = {}
-        for row in rows:
-            col_name = row[1]
-            col_type = row[2]
-            if not col_type:
-                continue
-            out[col_name.upper()] = self.data_transformer.get_type_from_sql_type(col_type)
-        return out
-
-    def execute(self, statement, commit=True):
-        statement = self.normalize_statment(statement)
-        cursor = self.__db_connection.cursor()
-        if VERBOSE:
-            print()
-            print("$$$$$$ SQL STATEMENT $$$$$$")
-            print(statement)
-        cursor.execute(statement)
         try:
-            rows = cursor.fetchall()
-            schema = [desc[0] for desc in cursor.description]
-            out = pl.DataFrame(rows, schema=schema, orient='row')
-            if VERBOSE:
-                print()
-                print(out)
+            res = self.execute(f"PRAGMA table_info('{table_name.split('.')[-1]}')").to_dicts()
+            out = {}
+            for row in res:
+                out[row['name'].upper()] = self.data_transformer.get_type_from_sql_type(row["type"])
+            return out
+        except Exception as e:
+            return {}
+        
+    def execute(self, statement, commit=True):
+        self.__querys_executed_memory += 1
+        execution_id = str(uuid4())
+        with self.lock:
+            if self.query_queue is None:
+                return
+            self.query_queue.append({"statement": statement, "commit": commit, "execution_id": execution_id})
+        while True:
+            with self.lock:
+                if execution_id in self.result_queue:
+                    result = self.result_queue.pop(execution_id)
+                    return result
+            time.sleep(0.1)
+
+    def _execute_memory(self, statement_input, commit=True):
+        logger.debug('{"running": "MemoryDB.execute", "statement": "' + str(statement_input) + '"}')
+        statements = statement_input if isinstance(statement_input, list) else [statement_input]
+        cursor = self.__db_connection.cursor()
+        try:
+            out = None
+            for statement in statements:
+                statement = self.normalize_statment(statement)
+                cursor.execute(statement)
+                rows = cursor.fetchall()
+                schema = [desc[0] for desc in cursor.description]
+                out = pl.DataFrame(rows, schema=schema, orient='row')
+                out.columns = [col.lower() for col in out.columns]
+                logger.debug('{"running": "MemoryDB.execute", "result": "' + str(out) + '"}')
             return out
         except Exception:
             return None
         finally:
             if commit:
                 self.__db_connection.commit()
-            if VERBOSE:
-                print("$$$$$$$$$$$$$")
-                print()
+    
+    def snapshot_tables(self):
+        out = {}
+        for table, schema in self._table_schemas.items():
+            qry = self.query.select(from_table=self.get_table_name(table).name, columns=list(schema.keys()), limit=None)
+            out[table] = self.execute(qry)
+        return out

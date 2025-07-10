@@ -1,7 +1,7 @@
 import os
 os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from autodla import Object, primary_key
-from autodla.dbs import PostgresDB
+from autodla.dbs import MemoryDB
 
 
 # Create model
@@ -11,8 +11,9 @@ class User(Object):
     age: int
 
 
-# Connect to DB and register models
-db = PostgresDB()
+# Connect to DB and register models. MemoryDB keeps a local SQLite store
+# and periodically syncs to the PostgreSQL server.
+db = MemoryDB()
 db.attach([User])
 
 
@@ -27,3 +28,5 @@ for user in users:
 
 # Integrity of python id for the percieved same object
 print(id(user), id(users[-1]))
+
+db.exit()

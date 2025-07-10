@@ -1,0 +1,7 @@
+polars
+typing-extensions
+pydantic
+psycopg2-binary
+python-multipart
+fastapi
+uvicorn

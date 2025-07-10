@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from autodla.engine.data_conversion import DataTransformer, MethodArgument
 from datetime import datetime
+from autodla.utils.logger import logger
+
 
 class LambdaFinder(ast.NodeVisitor):
     def __init__(self): 
@@ -41,12 +43,12 @@ class NodeReturn:
     eval: Any = None
 
 def pn(node):
-        print()
+        logger.debug("")
         if isinstance(node, ast.AST):
-            print(ast.dump(node))
+            logger.debug(ast.dump(node))
         else:
-            print(node)
-        print()
+            logger.debug(node)
+        logger.debug("")
 
 class LambdaToSql(ast.NodeVisitor):
     def __init__(self, root : ast.Lambda, schema, data_transformer : DataTransformer, ctx_vars = {}, alias='x'):
@@ -99,6 +101,8 @@ class LambdaToSql(ast.NodeVisitor):
                 if caller.eval is None:
                     if attr not in self.schema:
                         raise AttributeError(f"invalid attribute for {caller.st}: '{node.attr}'")
+                    if caller.st == "":
+                        return NodeReturn(attr, self.schema.get(attr))
                     return NodeReturn(f'{caller.st}.{attr}', self.schema.get(attr))
                 if slice_node.eval is None:
                     raise ValueError(f'invalid slice node: {slice_node.st}')
@@ -231,7 +235,9 @@ class LambdaToSql(ast.NodeVisitor):
                 if caller.eval is None:
                     if node.attr not in self.schema:
                         raise AttributeError(f"invalid attribute for x: '{node.attr}'")
-                    return NodeReturn(f'{self.parse_node(node.value).st}.{node.attr}', self.schema.get(node.attr))
+                    if caller.st == "":
+                        return NodeReturn(node.attr, self.schema.get(node.attr))
+                    return NodeReturn(f'{caller.st}.{node.attr}', self.schema.get(node.attr))
                 val = getattr(caller.eval, node.attr)
                 if val is None:
                     raise AttributeError(f"attribute not found: '{node.attr}'")
@@ -244,7 +250,7 @@ class LambdaToSql(ast.NodeVisitor):
                     new_node=ast.Constant(value=evaluation)
                     return self.parse_node(new_node)
                 except:
-                    print(ast.dump(node))
+                    logger.debug(ast.dump(node))
                     raise ValueError(f'Invalid node type: {type(node).__name__}')
 
 
