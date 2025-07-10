@@ -30,3 +30,4 @@ for i in range(2):
 users = User.all(limit=None, skip=0)
 for user in users:
     print(user)
+db.exit()

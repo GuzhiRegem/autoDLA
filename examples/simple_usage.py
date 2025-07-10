@@ -28,3 +28,5 @@ for user in users:
 
 # Integrity of python id for the percieved same object
 print(id(user), id(users[-1]))
+
+db.exit()

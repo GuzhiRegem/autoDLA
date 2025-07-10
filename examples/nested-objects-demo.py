@@ -22,6 +22,6 @@ db = MemoryDB()
 db.attach([User, Group])
 
 
-
+db.exit()
 
 
