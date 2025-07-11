@@ -125,14 +125,13 @@ class PostgresDB(MemoryDB):
         self.__querys_executed_postgres = 0
         super().__init__()
         self.__connection_url = connection_url
-        self.connect()
         self.__pg_dt = PostgresDataTransformer()
         self.__pg_query = PostgresQueryBuilder(self.__pg_dt)
         self.__last_sync = datetime.now()
         self.watchdog = Watchdog(DB_FLUSH_TIME, self.sync)
         self.__atached = False
         self.__mid_sync = False
-        self._execute("update pg_cast set castcontext='a' where casttarget = 'boolean'::regtype;")
+        self.connect()
     
     def connect(self):
         """
@@ -140,6 +139,7 @@ class PostgresDB(MemoryDB):
         """
         try:
             self.__pg_connection = psycopg2.connect(self.__connection_url)
+            self._execute("update pg_cast set castcontext='a' where casttarget = 'boolean'::regtype;")
             return True
         except psycopg2.OperationalError as e:
             self.__pg_connection = None
