@@ -124,7 +124,8 @@ class PostgresDB(MemoryDB):
     def __init__(self, connection_url=CONNECTION_URL):
         self.__querys_executed_postgres = 0
         super().__init__()
-        self.__pg_connection = psycopg2.connect(connection_url)
+        self.__connection_url = connection_url
+        self.connect()
         self.__pg_dt = PostgresDataTransformer()
         self.__pg_query = PostgresQueryBuilder(self.__pg_dt)
         self.__last_sync = datetime.now()
@@ -133,6 +134,28 @@ class PostgresDB(MemoryDB):
         self.__mid_sync = False
         self._execute("update pg_cast set castcontext='a' where casttarget = 'boolean'::regtype;")
     
+    def connect(self):
+        """
+        Connects to the PostgreSQL database.
+        """
+        try:
+            self.__pg_connection = psycopg2.connect(self.__connection_url)
+            return True
+        except psycopg2.OperationalError as e:
+            self.__pg_connection = None
+            logger.error(f"Failed to connect to PostgreSQL: {e}")
+        return False
+    
+    def use_connection(func):
+        def wrapper(self, *args, **kwargs):
+            if self.__pg_connection is None:
+                if not self.connect():
+                    logger.error("Failed to connect to PostgreSQL, cannot execute query.")
+                    return None
+            return func(*args, **kwargs)
+        return wrapper
+        
+
     @property
     def usage_metrics(self):
         """
@@ -156,6 +179,7 @@ class PostgresDB(MemoryDB):
         res = super().execute(statement, commit)
         return res
     
+    @use_connection
     def attach(self, objects):
         logger.debug("Attaching objects to PostgreSQL...\n")
         super().attach(objects)
@@ -165,6 +189,7 @@ class PostgresDB(MemoryDB):
         self.sync()
         logger.debug("Attached objects to PostgreSQL...\n")
 
+    @use_connection
     def sync(self):
         if self.__mid_sync:
             logger.debug("Sync already in progress, skipping...")
