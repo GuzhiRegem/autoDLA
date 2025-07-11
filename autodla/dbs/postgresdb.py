@@ -145,16 +145,6 @@ class PostgresDB(MemoryDB):
             self.__pg_connection = None
             logger.error(f"Failed to connect to PostgreSQL: {e}")
         return False
-    
-    def use_connection(func):
-        def wrapper(self, *args, **kwargs):
-            if self.__pg_connection is None:
-                if not self.connect():
-                    logger.error("Failed to connect to PostgreSQL, cannot execute query.")
-                    return None
-            return func(*args, **kwargs)
-        return wrapper
-        
 
     @property
     def usage_metrics(self):
@@ -179,8 +169,11 @@ class PostgresDB(MemoryDB):
         res = super().execute(statement, commit)
         return res
     
-    @use_connection
     def attach(self, objects):
+        if self.__pg_connection is None:
+            if not self.connect():
+                logger.error("Failed to connect to PostgreSQL, cannot execute query.")
+                return None
         logger.debug("Attaching objects to PostgreSQL...\n")
         super().attach(objects)
         for table in self._tables:
@@ -189,8 +182,11 @@ class PostgresDB(MemoryDB):
         self.sync()
         logger.debug("Attached objects to PostgreSQL...\n")
 
-    @use_connection
     def sync(self):
+        if self.__pg_connection is None:
+            if not self.connect():
+                logger.error("Failed to connect to PostgreSQL, cannot execute query.")
+                return None
         if self.__mid_sync:
             logger.debug("Sync already in progress, skipping...")
             return
