@@ -1,7 +1,7 @@
-polars
-typing-extensions
-pydantic
-psycopg2-binary
-python-multipart
-fastapi
-uvicorn
+typing_extensions==4.14.1
+fastapi==0.116.0
+uvicorn==0.35.0
+polars==1.31.0
+psycopg2-binary==2.9.10
+pydantic==2.11.7
+python-multipart==0.0.20
