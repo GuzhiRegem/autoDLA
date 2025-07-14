@@ -9,16 +9,23 @@ from datetime import date, datetime
 from uuid import UUID, uuid4
 import os
 import time
+import traceback
 
 import threading
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
     DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
+def to_name(st):
+        if "." in st:
+            return st
+        if st[0] != '"' and st[-1] != '"':
+            st = f'"{st}"'
+        return st
 
 class MemoryQueryBuilder(QueryBuilder):
     def select(self, from_table: str, columns: list[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None, offset: int = None) -> str:
-        qry = "SELECT " + ", ".join(columns) + " FROM " + from_table
+        qry = "SELECT " + ", ".join([to_name(i) for i in columns]) + " FROM " + to_name(from_table)
         if where:
             qry += " WHERE " + where
         if order_by:
@@ -30,27 +37,27 @@ class MemoryQueryBuilder(QueryBuilder):
         return qry
 
     def insert(self, into_table: str, values: list[dict]) -> str:
-        qry = "INSERT INTO " + into_table + " (" + ", ".join(values[0].keys()) + ") VALUES "
+        qry = "INSERT INTO " + to_name(into_table) + " (" + ", ".join(values[0].keys()) + ") VALUES "
         qry += ", ".join([f"({', '.join([self._data_transformer.convert_data(v) for v in d.values()])})" for d in values])
         return qry
 
     def update(self, table: str, values: dict, where: str) -> str:
-        qry = f"UPDATE {table} SET {', '.join([f'{k.upper()} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
+        qry = f"UPDATE {to_name(table)} SET {', '.join([f'{k.upper()} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
         return qry
 
     def delete(self, table: str, where: str) -> str:
-        qry = f"DELETE FROM {table} WHERE {where}"
+        qry = f"DELETE FROM {to_name(table)} WHERE {where}"
         return qry
 
     def create_table(self, table_name: str, schema: dict, if_exists: bool = False) -> str:
         if_exists_st = "IF NOT EXISTS" if if_exists else ""
         items = [f'{k} {v}' for k, v in schema.items()]
-        qry = f"CREATE TABLE {if_exists_st} {table_name} ({', '.join(items)});"
+        qry = f"CREATE TABLE {if_exists_st} {to_name(table_name)} ({', '.join(items)});"
         return qry
 
     def drop_table(self, table_name: str, if_exists: bool = False) -> str:
         if_exists_st = "IF EXISTS" if if_exists else ""
-        qry = f"DROP TABLE {if_exists_st} {table_name};"
+        qry = f"DROP TABLE {if_exists_st} {to_name(table_name)};"
         return qry
 
 class MemoryDataTransformer(DataTransformer):
@@ -188,14 +195,19 @@ class MemoryDB(DB_Connection):
             out = None
             for statement in statements:
                 statement = self.normalize_statment(statement)
-                cursor.execute(statement)
+                try:
+                    cursor.execute(statement)
+                except Exception as e:
+                    raise ValueError(f"Error excuting query:\n< {statement} >\nError: <{traceback.format_exc()} {e}>")
                 rows = cursor.fetchall()
-                schema = [desc[0] for desc in cursor.description]
-                out = pl.DataFrame(rows, schema=schema, orient='row')
-                out.columns = [col.lower() for col in out.columns]
-                logger.debug('{"running": "MemoryDB.execute", "result": "' + str(out) + '"}')
+                if rows:
+                    schema = [desc[0] for desc in cursor.description]
+                    out = pl.DataFrame(rows, schema=schema, orient='row')
+                    out.columns = [col.lower() for col in out.columns]
+                    logger.debug('{"running": "MemoryDB.execute", "result": "' + str(out) + '"}')
             return out
-        except Exception:
+        except Exception as e:
+            logger.error(f"{e}")
             return None
         finally:
             if commit:
@@ -205,5 +217,8 @@ class MemoryDB(DB_Connection):
         out = {}
         for table, schema in self._table_schemas.items():
             qry = self.query.select(from_table=self.get_table_name(table).name, columns=list(schema.keys()), limit=None)
-            out[table] = self.execute(qry)
+            res = self.execute(qry)
+            if res is None:
+                res = pl.DataFrame(data=None, schema=[k.lower() for k in schema])
+            out[table] = res
         return out

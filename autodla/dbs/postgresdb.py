@@ -13,6 +13,7 @@ import asyncio
 from autodla.utils.watchdog import Watchdog
 from autodla.dbs.memorydb import MemoryDB
 from autodla.utils.df_tools import df_comparator, ensure_dtype_equality
+import traceback
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
@@ -35,9 +36,14 @@ if "AUTODLA_DB_FLUSH_TIME" in os.environ:
 
 CONNECTION_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_URL}/{POSTGRES_DB}"
 
+def to_name(st):
+    if "." not in st:
+        st = "public." + st
+    return st
+
 class PostgresQueryBuilder(QueryBuilder):
     def select(self, from_table: str, columns: List[str], where: str = None, limit: int = 10, order_by: str = None, group_by: list[str] = None, offset: int = None) -> pl.DataFrame:
-        qry = "SELECT " + ", ".join(columns) + " FROM public." + from_table
+        qry = "SELECT " + ", ".join(columns) + " FROM " + to_name(from_table)
         if where:
             qry += " WHERE " + where
         if order_by:
@@ -49,27 +55,27 @@ class PostgresQueryBuilder(QueryBuilder):
         return qry
 
     def insert(self, into_table: str, values: List[dict]) -> None:
-        qry = "INSERT INTO public." + into_table + " (" + ", ".join(values[0].keys()) + ") VALUES "
+        qry = "INSERT INTO " + to_name(into_table) + " (" + ", ".join(values[0].keys()) + ") VALUES "
         qry += ", ".join([f"({', '.join([self._data_transformer.convert_data(v) for v in d.values()])})" for d in values])
         return qry
 
     def update(self, table: str, values: dict, where: str) -> None:
-        qry = f"UPDATE public.{table} SET {', '.join([f'{k.upper()} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
+        qry = f"UPDATE {to_name(table)} SET {', '.join([f'{k.upper()} = {self._data_transformer.convert_data(v)}' for k, v in values.items()])} WHERE {where}"
         return qry
 
     def delete(self, table: str, where: str) -> None:
-        qry = f"DELETE FROM public.{table} WHERE {where}"
+        qry = f"DELETE FROM {to_name(table)} WHERE {where}"
         return qry
 
     def create_table(self, table_name: str, schema: dict, if_exists = False) -> None:
         if_exists_st = "IF EXISTS" if if_exists else ""
         items = [f'{k} {v}' for k, v in schema.items()]
-        qry = f"CREATE TABLE {if_exists_st} public.{table_name} ({', '.join(items)});"
+        qry = f"CREATE TABLE {if_exists_st} {to_name(table_name)} ({', '.join(items)});"
         return qry
 
     def drop_table(self, table_name: str, if_exists = False) -> None:
         if_exists_st = "IF EXISTS" if if_exists else ""
-        qry = f"DROP TABLE {if_exists_st} public.{table_name};"
+        qry = f"DROP TABLE {if_exists_st} {to_name(table_name)};"
         return qry
 
 class PostgresDataTransformer(DataTransformer):
@@ -268,7 +274,7 @@ class PostgresDB(MemoryDB):
     def _get_table_definition(self, table_name) -> dict[str, type]:
         if "." in table_name:
             table_name = table_name.split(".")[-1]
-        res = self._execute([self.query.select(
+        res = self._execute([self.__pg_query.select(
             from_table='INFORMATION_SCHEMA.COLUMNS',
             columns=["column_name", "data_type"],
             limit=None,
@@ -287,20 +293,29 @@ class PostgresDB(MemoryDB):
     
     def _execute(self, statements : list, commit=True):
         self.__querys_executed_postgres += 1
+        statements = statements if isinstance(statements, list) else [statements]
         with self.__pg_connection.cursor() as cursor:
             try:
                 out = None
                 for statement in statements:
                     statement = self.normalize_statment(statement)
                     logger.debug('{"running": "PostgresDB._execute", "statement": "' + statement + '"}')
-                    cursor.execute(statement)
-                    rows = cursor.fetchall()
-                    schema = [desc[0] for desc in cursor.description]
-                    out = pl.DataFrame(rows, schema=schema, orient='row')
-                    out.columns = [col.lower() for col in out.columns]
-                    logger.debug('{"running": "PostgresDB._execute", "result": "' + str(out) + '"}')
+                    try:
+                        cursor.execute(statement)
+                    except Exception as e:
+                        raise ValueError(f"Error excuting query:\n< {statement} >\nError: <{traceback.format_exc()} {e}>")
+                    try:
+                        rows = cursor.fetchall()
+                    except psycopg2.ProgrammingError:
+                        continue
+                    if rows:
+                        schema = [desc[0] for desc in cursor.description]
+                        out = pl.DataFrame(rows, schema=schema, orient='row')
+                        out.columns = [col.lower() for col in out.columns]
+                        logger.debug('{"running": "PostgresDB._execute", "result": "' + str(out) + '"}')
                 return out
-            except:
+            except Exception as e:
+                logger.error(f"{traceback.format_exc()} {e}")
                 return None
             finally:
                 if commit:
