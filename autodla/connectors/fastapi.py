@@ -7,6 +7,8 @@ import json
 from autodla.engine.web_connection import EndpointMaker, WebConnection
 from autodla.engine.lambda_conversion import json_to_lambda_str
 import inspect
+import asyncio
+from contextlib import asynccontextmanager
 
 class FastApiEndpointMaker(EndpointMaker):
     @classmethod
@@ -78,6 +80,13 @@ class FastApiWebConnection(WebConnection):
     def __init__(self, app, db, setup_autodla_web=True, admin_endpoints_prefix='/autodla-admin'):
         self.app = app
         self.db = db
+        if poll_watchdog := getattr(db, "poll_watchdog", None):
+            @asynccontextmanager
+            async def lifespan(app):
+                asyncio.create_task(poll_watchdog())
+                yield
+            app.lifespan = lifespan
+            
         self.admin_endpoints_prefix = admin_endpoints_prefix
         super().__init__(FastApiEndpointMaker(), setup_autodla_web)
 
