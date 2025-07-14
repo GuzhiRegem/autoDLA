@@ -268,7 +268,10 @@ class PostgresDB(MemoryDB):
         out = {}
         for table, schema in self._table_schemas.items():
             qry = self.__pg_query.select(from_table=f"{table} t", columns=[f"t.{i}" for i in schema], limit=None)
-            out[table] = self._execute([qry], commit=False)
+            res = self._execute([qry], commit=False)
+            if res is None:
+                res = pl.DataFrame(data=None, schema=[k.lower() for k in schema])
+            out[table] = res
         return out
 
     def _get_table_definition(self, table_name) -> dict[str, type]:
@@ -279,19 +282,21 @@ class PostgresDB(MemoryDB):
             columns=["column_name", "data_type"],
             limit=None,
             where=f"table_name = '{table_name}'"
-        )], commit=False).to_dicts()
-        conversion_dict = {
-            "boolean": "bool",
-            "timestamp without time zone": "timestamp"
-        }
+        )], commit=False)
         out = {}
-        for row in res:
-            if row['data_type'] in conversion_dict:
-                row['data_type'] = conversion_dict[row['data_type']]
-            out[row['column_name'].upper()] = self.__pg_dt.get_type_from_sql_type(row["data_type"])
+        if res is not None:
+            res = res.to_dicts()
+            conversion_dict = {
+                "boolean": "bool",
+                "timestamp without time zone": "timestamp"
+            }
+            for row in res:
+                if row['data_type'] in conversion_dict:
+                    row['data_type'] = conversion_dict[row['data_type']]
+                out[row['column_name'].upper()] = self.__pg_dt.get_type_from_sql_type(row["data_type"])
         return out
     
-    def _execute(self, statements : list, commit=True):
+    def _execute(self, statements : list, commit=True) -> Optional[pl.DataFrame | None]:
         self.__querys_executed_postgres += 1
         statements = statements if isinstance(statements, list) else [statements]
         with self.__pg_connection.cursor() as cursor:
