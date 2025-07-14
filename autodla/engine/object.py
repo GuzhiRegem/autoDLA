@@ -284,7 +284,9 @@ class Object(BaseModel):
 			res = cls.__table.get_all(limit, only_current, only_active, skip=skip)
 		else:
 			res = cls.__table.filter(filter, limit, only_current, only_active, skip=skip)
-		obj_lis = res.to_dicts()
+		obj_lis = []
+		if res is not None:
+			obj_lis = res.to_dicts()
 		if obj_lis == []:
 			return []
 		id_list = res[cls.identifier_field].to_list()
