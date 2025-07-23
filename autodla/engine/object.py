@@ -1,3 +1,4 @@
+from __future__ import annotations
 from json import JSONEncoder
 from dataclasses import field, _MISSING_TYPE
 from datetime import datetime
@@ -24,6 +25,12 @@ from autodla.engine.lambda_conversion import lambda_to_sql
 from pydantic import BaseModel, GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema, PydanticUndefinedType
 from autodla.utils.logger import logger
+from autodla.engine.interfaces import (
+    DB_Connection_Interface,
+    Object_Interface,
+    Table_Interface,
+    primary_key_Interface
+)
 import warnings
 warnings.filterwarnings('error')
 
@@ -38,7 +45,7 @@ JSONEncoder.default = _default
 primary_key_type = TypeVar('primary_key_type', bound='primary_key')
 
 
-class primary_key(str):
+class primary_key(primary_key_Interface):
     @classmethod
     def generate(cls: Type[primary_key_type]) -> primary_key_type:
         return cls(str(uuid.uuid4()))
@@ -91,7 +98,7 @@ def dla_dict(
     return out
 
 
-class Table:
+class Table(Table_Interface):
     def __init__(
             self,
             table_name: str,
@@ -199,10 +206,17 @@ class Table:
             self.__db.get_table_name(self.table_name).name, "TRUE")
         self.db.execute(qry)
 
-
-class Object(BaseModel):
+class Object(Object_Interface):
+    class DependencyRequiredIds(BaseModel):
+        type: 'Object'
+        ids: set[str]
+    class ObjectDependency(BaseModel):
+        is_list: bool
+        is_value: bool
+        type: 'Object'
+        table: Table
     __table: ClassVar[Optional[Table | None]] = None
-    __dependencies: ClassVar[dict] = field(default_factory=dict)
+    __dependencies: ClassVar[dict[str, ObjectDependency]] = field(default_factory=dict)
     identifier_field: ClassVar[str] = "id"
     __objects_list: ClassVar[List['Object']] = field(default_factory=list)
     __objects_map: ClassVar[dict[str, 'Object']] = field(default_factory=dict)
@@ -217,7 +231,7 @@ class Object(BaseModel):
     @classmethod
     def set_db(cls, db: DB_Connection) -> None:
         schema = cls.get_types()
-        dependencies: dict[str, dict] = {}
+        dependencies: dict[str, Object.ObjectDependency] = {}
         common_fields = {
             'DLA_object_id': {
                 "type": uuid.UUID
@@ -244,7 +258,7 @@ class Object(BaseModel):
                     + f"{cls.__name__.lower()}"\
                     + f"__{k}__"\
                     + f"{i['depends'].__name__.lower()}"
-                dependencies[k] = {
+                dependencies[k] = Object.ObjectDependency(**{
                     'is_list': i.get("is_list") is True,
                     'is_value': False,
                     'type': i['depends'],
@@ -266,10 +280,10 @@ class Object(BaseModel):
                         },
                         db
                     )
-                }
+                })
             elif 'is_list' in i:
                 table_name = f"{cls.__name__.lower()}__{k}"
-                dependencies[k] = {
+                dependencies[k] = Object.ObjectDependency(**{
                     'is_list': i.get("is_list") is True,
                     'is_value': True,
                     'type': i["type"],
@@ -291,7 +305,7 @@ class Object(BaseModel):
                         },
                         db
                     )
-                }
+                })
         for key in dependencies.keys():
             del schema[key]
         cls.__table = Table(cls.__name__.lower(), {
@@ -299,13 +313,13 @@ class Object(BaseModel):
         cls.__dependencies = dependencies
 
     @classmethod
-    def get_types(cls) -> dict[str, dict]:
+    def get_types(cls) -> dict[str, Object_Interface.TypeDictionary]:
         out = {}
         fields = cls.model_fields
         for i in fields:
             if (get_origin(fields[i].annotation) == ClassVar):
                 continue
-            type_out: dict = {}
+            type_out: Object_Interface.TypeDictionary = {}
             tp: Optional[Type | None] = fields[i].annotation
             ori, arg = get_origin(tp), get_args(tp)
             if ori == Union:
@@ -392,75 +406,76 @@ class Object(BaseModel):
         id_list = res[cls.identifier_field].to_list()
 
         table_results = {}
-        dep_tables_required_ids: dict[str, Any] = {}
+        dep_tables_required_ids: dict[str, Object.DependencyRequiredIds] = {}
         for k, v in cls.__dependencies.items():
-            if v['is_value']:
+            if v.is_value:
                 continue
-            dep_table_: Table = v["table"]
+            dep_table_: Table = v.table
             table_results[k] = dep_table_.filter(
                 lambda x: x.first_id in id_list,
                 None, only_current=only_current,
                 only_active=only_active
             )
             ids: set[str] = set(table_results[k]['second_id'].to_list())
-            t_name: str = v['type'].__name__
+            t_name: str = v.type.__class__.__name__
             if t_name not in dep_tables_required_ids:
-                tp: Type = v['type']
-                dep_tables_required_ids[t_name] = {
-                    "type": tp, "ids": ids
-                }
+                tp: 'Object' = v.type
+                dep_tables_required_ids[t_name] = Object.DependencyRequiredIds(
+                    type=tp, ids=ids
+                )
             else:
                 row = dep_tables_required_ids[t_name]
-                row["ids"] = dep_tables_required_ids[t_name]["ids"].union(ids)
+                row.ids = row.ids.union(ids)
 
         dep_tables: dict[str, dict[str, "Object"]] = {}
-        for k, v in dep_tables_required_ids.items():
-            l: list[str] = list(v['ids'])
-            tp_: 'Object' = v['type']
+        for k_, v_ in dep_tables_required_ids.items():
+            l: list[str] = list(v_.ids)
+            tp_: 'Object' = v_.type
             id_field = tp_.identifier_field
-            dep_tables[k] = {}
+            dep_tables[k_] = {}
             if len(l) == 0:
                 continue
             filter_res = tp_.filter(lambda x: x[id_field] in l)
             for obj in filter_res:
-                dep_tables[k][getattr(obj, tp_.identifier_field)] = obj
+                dep_tables[k_][getattr(obj, tp_.identifier_field)] = obj
 
         out = []
-        for obj in obj_lis:
+        for obj_dic in obj_lis:
             dep_key: str
             for dep_key in cls.__dependencies.keys():
-                if cls.__dependencies[dep_key]['is_value']:
-                    obj_id: primary_key = obj[cls.identifier_field]
-                    dep_table: Table = cls.__dependencies[dep_key]['table']
+                dep: Object.ObjectDependency = cls.__dependencies[dep_key]
+                if dep.is_value:
+                    obj_id: primary_key = obj_dic[cls.identifier_field]
+                    dep_table: Table = dep.table
                     table_df: pl.DataFrame = dep_table.filter(
                         lambda x: x.first_id == obj_id
                     )
                     table_res: list[Any] = table_df['value'].to_list()
-                    obj[dep_key] = table_res
+                    obj_dic[dep_key] = table_res
                     continue
                 df = table_results[dep_key]
                 val_lis = []
-                t_name = cls.__dependencies[dep_key]["type"].__name__
+                t_name = dep.type.__class__.__name__
                 if len(df) > 0:
                     lis = df.filter(df['first_id'] == obj[cls.identifier_field])[
                         'second_id'].to_list()
                     for row in lis:
-                        val = dep_tables[t_name].get(row)
+                        val = dep_tables[t_name].get(str(row))
                         if val is not None:
                             val_lis.append(val)
-                obj[dep_key] = val_lis
-                if not cls.__dependencies[dep_key]['is_list']:
+                obj_dic[dep_key] = val_lis
+                if not cls.__dependencies[dep_key].is_list:
                     if obj[dep_key] != []:
-                        obj[dep_key] = obj[dep_key][0]
+                        obj_dic[dep_key] = obj[dep_key][0]
                     else:
-                        obj[dep_key] = None
-            updt = cls.__update_individual(obj)
-            if updt is not None:
-                out.append(updt)
+                        obj_dic[dep_key] = None
+            update_obj: Optional['Object'] = cls.__update_individual(obj_dic)
+            if update_obj is not None:
+                out.append(update_obj)
         return out
 
     @classmethod
-    def new(cls, **kwargs):
+    def new(cls, **kwargs) -> 'Object':
         if cls.__table is None:
             raise ImportError('DB not defined')
         if cls.identifier_field in kwargs:
@@ -472,9 +487,9 @@ class Object(BaseModel):
         dla_data = dla_dict("INSERT", is_current=True)
         cls.__table.insert({**data, **dla_data()})
         for field, v in cls.__dependencies.items():
-            if v['is_list']:
+            if v.is_list:
                 new_rows = []
-                if v['is_value']:
+                if v.is_value:
                     for idx, i in enumerate(getattr(out, field)):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
@@ -488,19 +503,19 @@ class Object(BaseModel):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
                             "first_id": out[cls.identifier_field],
-                            "second_id": i[v['type'].identifier_field],
+                            "second_id": getattr(i, v.type.identifier_field),
                             "list_index": idx,
                             **dla_data()
                         })
                 for j in new_rows:
-                    v['table'].insert(j)
+                    v.table.insert(j)
             else:
                 val = getattr(out, field)
                 if val is not None:
-                    v['table'].insert({
+                    v.table.insert({
                         'connection_id': primary_key.generate(),
                         "first_id": out[cls.identifier_field],
-                        "second_id": val[v['type'].identifier_field],
+                        "second_id": val[v.type.identifier_field],
                         "list_index": 0,
                         **dla_data()
                     })
@@ -508,20 +523,23 @@ class Object(BaseModel):
         cls.__objects_list.append(out)
         return out
 
-    def history(self):
+    def history(self) -> dict[str, list[dict[str, Any]]]:
+        if self.__table is None:
+            return {}
         self_res = self.__table.filter(lambda x: x[self.identifier_field] == getattr(
             self, self.identifier_field), limit=None, only_active=False, only_current=False)
-        out = {
+        out: dict[str, Union[list[dict[str, Any]]]] = {
             "self": self_res.to_dicts(),
-            "dependencies": {}
         }
         for k, v in self.__dependencies.items():
-            dep_res = v['table'].filter(lambda x: x.first_id == getattr(
+            dep_res = v.table.filter(lambda x: x.first_id == getattr(
                 self, self.identifier_field), limit=None, only_active=False, only_current=False)
-            out['dependencies'][k] = dep_res.to_dicts()
+            out[k] = dep_res.to_dicts()
         return out
 
-    def update(self, **kwargs):
+    def update(self, **kwargs) -> None:
+        if self.__table is None:
+            return
         data = {}
         for key in self.to_dict():
             if key in kwargs:
@@ -533,11 +551,10 @@ class Object(BaseModel):
             if key in self.__dependencies:
                 del data[key]
                 dependency = self.__dependencies[key]
-                dependency['table'].update(lambda x: x.first_id == self.id, {
-                                           'DLA_is_current': False})
+                dependency.table.update(lambda x: x.first_id == self[self.identifier_field], {'DLA_is_current': False})
                 new_rows = []
-                if dependency['is_list']:
-                    if dependency['is_value']:
+                if dependency.is_list:
+                    if dependency.is_value:
                         for idx, i in enumerate(value):
                             new_rows.append({
                                 'connection_id': primary_key.generate(),
@@ -551,7 +568,7 @@ class Object(BaseModel):
                             new_rows.append({
                                 'connection_id': primary_key.generate(),
                                 "first_id": self[self.identifier_field],
-                                "second_id": i[dependency['type'].identifier_field],
+                                "second_id": i[dependency.type.identifier_field],
                                 "list_index": idx,
                                 **dla_data_insert()
                             })
@@ -560,32 +577,33 @@ class Object(BaseModel):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
                             "first_id": self[self.identifier_field],
-                            "second_id": value[dependency['type'].identifier_field],
+                            "second_id": value[dependency.type.identifier_field],
                             "list_index": 0,
                             **dla_data_insert()
                         })
                 for j in new_rows:
-                    dependency['table'].insert(j)
+                    dependency.table.insert(j)
             setattr(self, key, value)
-        self.__table.update(lambda x: x[self.identifier_field] == self.id, {
+        self.__table.update(lambda x: x[self.identifier_field] == self[self.identifier_field], {
                             'DLA_is_current': False})
         self.__table.insert({**data, **dla_data_insert()})
 
-    def delete(self):
+    def delete(self) -> None:
+        if self.__table is None:
+            return
         data = {}
         for key in self.__class__.model_fields:
             data[key] = getattr(self, key)
         dla_data_delete = dla_dict("DELETE", is_current=True, is_active=False)
         for key, dependency in self.__dependencies.items():
             del data[key]
-            dependency['table'].update(lambda x: x.first_id == self.id, {
-                                       'DLA_is_current': False})
+            dependency.table.update(lambda x: x.first_id == self[self.identifier_field], {'DLA_is_current': False})
             value = getattr(self, key)
             if value is None:
                 continue
             new_rows = []
-            if dependency['is_list']:
-                if dependency['is_value']:
+            if dependency.is_list:
+                if dependency.is_value:
                     for idx, i in enumerate(value):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
@@ -599,7 +617,7 @@ class Object(BaseModel):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
                             "first_id": self[self.identifier_field],
-                            "second_id": i[dependency['type'].identifier_field],
+                            "second_id": i[dependency.type.identifier_field],
                             "list_index": idx,
                             **dla_data_delete()
                         })
@@ -608,41 +626,43 @@ class Object(BaseModel):
                     new_rows.append({
                         'connection_id': primary_key.generate(),
                         "first_id": self[self.identifier_field],
-                        "second_id": value[dependency['type'].identifier_field],
+                        "second_id": value[dependency.type.identifier_field],
                         "list_index": 0,
                         **dla_data_delete()
                     })
             for j in new_rows:
-                dependency['table'].insert(j)
-        self.__table.update(lambda x: x[self.identifier_field] == self.id, {
+                dependency.table.insert(j)
+        self.__table.update(lambda x: x[self.identifier_field] == self[self.identifier_field], {
                             'DLA_is_current': False})
         self.__table.insert({**data, **dla_data_delete()})
 
     @classmethod
-    def all(cls, limit=10, skip=0):
+    def all(cls, limit=10, skip=0) -> list["Object"]:
         out = cls.__update_info(limit=limit, skip=skip)
         return out
 
     @classmethod
-    def filter(cls, lambda_f, limit=10, skip=0):
+    def filter(cls, lambda_f, limit=10, skip=0) -> list["Object"]:
         out = cls.__update_info(filter=lambda_f, limit=limit, skip=skip)
         return out
 
     @classmethod
-    def get_by_id(cls, id_param):
+    def get_by_id(cls, id_param) -> Optional["Object"]:
         cls.__update_info(
             lambda x: x[cls.identifier_field] == id_param, limit=1, skip=0)
         return cls.__objects_map.get(id_param)
 
     @classmethod
-    def get_table_res(cls, limit=10, skip=0, only_current=True, only_active=True) -> pl.DataFrame:
+    def get_table_res(cls, limit=10, skip=0, only_current=True, only_active=True) -> Optional[pl.DataFrame]:
+        if cls.__table is None:
+            return None
         return cls.__table.get_all(limit=limit, only_current=only_current, only_active=only_active, skip=skip)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump()
 
-    def to_json(self):
+    def to_json(self) -> str:
         return self.model_dump_json()
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
