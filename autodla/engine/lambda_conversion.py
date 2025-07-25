@@ -3,7 +3,6 @@ import ast
 import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Type
-from typing_extensions import Literal
 from autodla.engine.interfaces import (
     DataTransformer_Interface,
     MethodArgument
@@ -25,6 +24,17 @@ class LambdaFinder(ast.NodeVisitor):
             self.found = node
             return
         ast.NodeVisitor.generic_visit(self, node)
+
+
+class CallableType(object):
+    def __init__(self, func: Callable):
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+    def __repr__(self):
+        return f"Callable({self.func.__name__})"
 
 
 def lambda_to_ast(lambda_func):
@@ -133,7 +143,7 @@ class LambdaToSql(ast.NodeVisitor):
         node: ast.AST
     ) -> NodeReturn:
         match node:
-            case ast.Subscript:
+            case ast.Subscript():
                 caller = self.parse_node(node.value)
                 slice_node = self.parse_node(node.slice)
                 attr = slice_node.st if (
@@ -143,7 +153,7 @@ class LambdaToSql(ast.NodeVisitor):
                         raise AttributeError(
                             "invalid attribute for {}: '{}'".format(
                                 caller.st,
-                                node.attr
+                                attr
                             ))
                     if caller.st == "":
                         return NodeReturn(attr, self.schema.get(attr))
@@ -155,11 +165,11 @@ class LambdaToSql(ast.NodeVisitor):
                     raise ValueError(f'invalid slice node: {slice_node.st}')
                 val = getattr(caller.eval, slice_node.eval)
                 if val is None:
-                    raise AttributeError(f"attribute not found: '{node.attr}'")
+                    raise AttributeError(f"attribute not found: '{attr}'")
                 if callable(val):
-                    return NodeReturn(node.attr, Callable, val)
+                    return NodeReturn(attr, CallableType, val)
                 return self.evaluate_and_parse_node(node)
-            case 'IfExp':
+            case ast.IfExp():
                 condition = self.parse_node(node.test)
                 condition_value = self.parse_node(node.body)
                 else_value = self.parse_node(node.orelse)
@@ -179,27 +189,27 @@ class LambdaToSql(ast.NodeVisitor):
                     else_value.st
                 )
                 return NodeReturn(st, condition_value.tp)
-            case 'Call':
+            case ast.Call():
                 args = [self.parse_node(arg) for arg in node.args]
                 func_name = ""
                 func = None
-                if type(node.func).__name__ == "Attribute":
-                    caller = self.parse_node(node.func.value)
-                    func_name = node.func.attr
-                    if caller.eval is not None:
-                        func = getattr(caller.eval, func_name)
-                else:
-                    func_name = node.func.id
-                    f = self.ctx_vars.get(func_name)
-                    if f is not None:
-                        if callable(f):
-                            func = f
-                        if type(f) is type(int) and all(
-                            [arg.eval is not None for arg in args]
-                        ):
-                            res = f(*[arg.eval for arg in args])
-                            return self.parse_node(self.obj_to_node(res))
-
+                match node.func:
+                    case ast.Name():
+                        func_name = node.func.id
+                        f = self.ctx_vars.get(func_name)
+                        if f is not None:
+                            if callable(f):
+                                func = f
+                            if type(f) is type(int) and all(
+                                [arg.eval is not None for arg in args]
+                            ):
+                                res = f(*[arg.eval for arg in args])
+                                return self.parse_node(self.obj_to_node(res))
+                    case ast.Attribute():
+                        caller = self.parse_node(node.func.value)
+                        func_name = node.func.attr
+                        if caller.eval is not None:
+                            func = getattr(caller.eval, func_name)
                 if func is not None and all([
                     arg.eval is not None for arg in args
                 ]):
@@ -233,14 +243,14 @@ class LambdaToSql(ast.NodeVisitor):
                         return NodeReturn(st, tp)
                 raise ValueError(f'function {func_name} not found')
 
-            case 'List':
+            case ast.List():
                 values = [self.parse_node(i) for i in node.elts]
                 st_out = f'({", ".join([node_i.st for node_i in values])})'
                 eval_list = [node_i.eval for node_i in values]
                 if all([node_i is not None for node_i in eval_list]):
                     return NodeReturn(st_out, list, eval_list)
                 return NodeReturn(st_out, list)
-            case 'UnaryOp':
+            case ast.UnaryOp():
                 op = self.data_transformer.get_operator("unary", node.op)
                 child = self.parse_node(node.operand)
                 if child.eval is not None:
@@ -249,7 +259,7 @@ class LambdaToSql(ast.NodeVisitor):
                     f'({op} {child.st})',
                     bool
                 )
-            case 'BoolOp':
+            case ast.BoolOp():
                 values = [self.parse_node(i) for i in node.values]
                 for i in values:
                     if i.tp != bool:
@@ -263,20 +273,27 @@ class LambdaToSql(ast.NodeVisitor):
                     f'({out})',
                     bool
                 )
-            case 'BinOp':
+            case ast.BinOp():
                 left = self.parse_node(node.left)
                 right = self.parse_node(node.right)
-                func = self.data_transformer.get_operator("binary", node.op)
+                bin_func = self.data_transformer.get_operator(
+                    "binary",
+                    node.op
+                )
+                if isinstance(bin_func, str):
+                    raise ValueError(
+                        f"binary operator '{bin_func}' not found"
+                    )
                 if left.tp != right.tp:
                     raise TypeError(
                         f"invalid operation between {left.tp} and {right.tp}")
                 if left.eval is not None and right.eval is not None:
                     return self.evaluate_and_parse_node(node)
                 return NodeReturn(
-                    f'({func(left.st, right.st)})',
+                    f'({bin_func(left.st, right.st)})',
                     left.tp
                 )
-            case 'Name':
+            case ast.Name():
                 if node.id == 'x':
                     return NodeReturn(self.alias, str)
                 value = self.ctx_vars.get(node.id)
@@ -284,54 +301,68 @@ class LambdaToSql(ast.NodeVisitor):
                     try:
                         transformed_value = self.data_transformer.convert_data(
                             value)
-                    except:
+                    except Exception as e:
+                        logger.error(
+                            f"Error converting data for {node.id}: {e}"
+                        )
                         transformed_value = node.id
                     return NodeReturn(transformed_value, type(value), value)
                 raise ValueError(f"'{node.id}' is not defined")
-            case 'Constant':
+            case ast.Constant():
                 return NodeReturn(
                     self.data_transformer.convert_data(node.value),
                     type(node.value),
                     node.value
                 )
-            case 'Compare':
+            case ast.Compare():
                 left = self.parse_node(node.left)
                 op = self.data_transformer.get_operator("numeric", node.ops[0])
                 right = self.parse_node(node.comparators[0])
                 if not self.node_compatibility(left, right):
                     raise TypeError(
-                        f"invalid comparission between {left.tp} and {right.tp}")
+                        "invalid comparission between {} and {}".format(
+                            left.tp,
+                            right.tp
+                        )
+                    )
                 if left.eval is not None and right.eval is not None:
                     return self.evaluate_and_parse_node(node)
                 return NodeReturn(
                     f'({left.st} {op} {right.st})', bool
                 )
-            case 'Attribute':
+            case ast.Attribute():
                 caller = self.parse_node(node.value)
                 if caller.eval is None:
                     if node.attr not in self.schema:
                         raise AttributeError(
                             f"invalid attribute for x: '{node.attr}'")
                     if caller.st == "":
-                        return NodeReturn(node.attr, self.schema.get(node.attr))
-                    return NodeReturn(f'{caller.st}.{node.attr}', self.schema.get(node.attr))
+                        return NodeReturn(
+                            node.attr,
+                            self.schema.get(node.attr)
+                        )
+                    return NodeReturn(
+                        f'{caller.st}.{node.attr}',
+                        self.schema.get(node.attr)
+                    )
                 val = getattr(caller.eval, node.attr)
                 if val is None:
                     raise AttributeError(f"attribute not found: '{node.attr}'")
-                if type(val) == Callable:
-                    return NodeReturn(node.attr, Callable, val)
+                if callable(val):
+                    return NodeReturn(node.attr, CallableType, val)
                 return self.evaluate_and_parse_node(node)
             case _:
                 try:
                     evaluation = self.evaluate_node(node)
                     new_node = ast.Constant(value=evaluation)
                     return self.parse_node(new_node)
-                except:
+                except Exception as e:
+                    logger.error(f"Error evaluating node: {e}")
                     logger.debug(ast.dump(node))
                     raise ValueError(
                         f'Invalid node type: {type(node).__name__}')
 
-    def transform(self):
+    def transform(self) -> NodeReturn:
         definition_error = False
         if len(self.root.args.args) != 1:
             definition_error = True
@@ -343,7 +374,7 @@ class LambdaToSql(ast.NodeVisitor):
         return out
 
 
-def get_context_from_lamba(lambda_func):
+def get_context_from_lamba(lambda_func) -> dict[str, Any]:
     file = lambda_func.__code__.co_filename
     line = lambda_func.__code__.co_firstlineno
     found = None
@@ -356,8 +387,14 @@ def get_context_from_lamba(lambda_func):
     return {**vars(builtins), **found.frame.f_locals}
 
 
-def lambda_to_sql(schema, lambda_func, data_transformer: DataTransformer, ctx_vars={}, alias='x') -> str:
-    if not type(lambda_func) == str:
+def lambda_to_sql(
+        schema: dict[str, Type],
+        lambda_func: Callable[[Any], bool],
+        data_transformer: DataTransformer_Interface,
+        ctx_vars={},
+        alias='x'
+) -> str:
+    if not type(lambda_func) is str:
         ctx_vars = get_context_from_lamba(lambda_func)
     lambda_node = lambda_to_ast(lambda_func)
     out = LambdaToSql(lambda_node, schema, data_transformer=data_transformer,
@@ -365,14 +402,16 @@ def lambda_to_sql(schema, lambda_func, data_transformer: DataTransformer, ctx_va
     return out.st
 
 
-def json_to_lambda_str(json_condition):
+def json_to_lambda_str(json_condition: dict) -> str:
     """
-    Transforms a SQL-inspired JSON condition to a Python lambda string representation.
+    Transforms a SQL-inspired JSON condition to a
+    Python lambda string representation.
 
     Args:
         json_condition (dict): A condition object that can be:
             - Simple: {"field": "age", "operator": "gt", "value": 10}
-            - Complex: {"and": [condition1, condition2, ...]} or {"or": [condition1, condition2, ...]}
+            - Complex: {"and": [condition1, condition2, ...]}
+                or {"or": [condition1, condition2, ...]}
 
     Returns:
         str: A string representation of the lambda function
@@ -381,12 +420,16 @@ def json_to_lambda_str(json_condition):
     if "and" in json_condition:
         sub_conditions = [json_to_lambda_str(
             cond) for cond in json_condition["and"]]
-        return f"lambda x: {' and '.join(f'({cond})' for cond in sub_conditions)}"
+        return f"lambda x: {
+            ' and '.join(f'({cond})' for cond in sub_conditions)
+        }"
 
     elif "or" in json_condition:
         sub_conditions = [json_to_lambda_str(
             cond) for cond in json_condition["or"]]
-        return f"lambda x: {' or '.join(f'({cond})' for cond in sub_conditions)}"
+        return f"lambda x: {
+            ' or '.join(f'({cond})' for cond in sub_conditions)
+        }"
 
     # Handle negation
     elif "not" in json_condition:
