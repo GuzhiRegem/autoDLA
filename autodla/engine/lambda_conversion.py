@@ -3,8 +3,10 @@ import ast
 import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Type
+from typing_extensions import Literal
 from autodla.engine.interfaces import (
     DataTransformer_Interface,
+    MethodArgument
 )
 from datetime import datetime
 from autodla.utils.logger import logger
@@ -45,7 +47,7 @@ def lambda_to_text(lambda_func):
 @dataclass
 class NodeReturn:
     st: str
-    tp: Optional[type]
+    tp: Optional[Type]
     eval: Optional[Any] = None
 
 
@@ -128,43 +130,57 @@ class LambdaToSql(ast.NodeVisitor):
 
     def parse_node(
         self,
-        node
+        node: ast.AST
     ) -> NodeReturn:
-        match type(node).__name__:
-            case 'Subscript':
+        match node:
+            case ast.Subscript:
                 caller = self.parse_node(node.value)
                 slice_node = self.parse_node(node.slice)
-                attr = slice_node.st if slice_node.eval is None else slice_node.eval
+                attr = slice_node.st if (
+                    slice_node.eval) is None else slice_node.eval
                 if caller.eval is None:
                     if attr not in self.schema:
                         raise AttributeError(
-                            f"invalid attribute for {caller.st}: '{node.attr}'")
+                            "invalid attribute for {}: '{}'".format(
+                                caller.st,
+                                node.attr
+                            ))
                     if caller.st == "":
                         return NodeReturn(attr, self.schema.get(attr))
-                    return NodeReturn(f'{caller.st}.{attr}', self.schema.get(attr))
+                    return NodeReturn(
+                        f'{caller.st}.{attr}',
+                        self.schema.get(attr)
+                    )
                 if slice_node.eval is None:
                     raise ValueError(f'invalid slice node: {slice_node.st}')
                 val = getattr(caller.eval, slice_node.eval)
                 if val is None:
                     raise AttributeError(f"attribute not found: '{node.attr}'")
-                if type(val) == Callable:
+                if callable(val):
                     return NodeReturn(node.attr, Callable, val)
                 return self.evaluate_and_parse_node(node)
             case 'IfExp':
                 condition = self.parse_node(node.test)
                 condition_value = self.parse_node(node.body)
                 else_value = self.parse_node(node.orelse)
-                if all([getattr(arg, 'eval', None) is not None for arg in [condition, condition_value, else_value]]):
+                if all([
+                    getattr(arg, 'eval', None) is not None for arg in [
+                        condition, condition_value, else_value
+                    ]
+                ]):
                     return self.evaluate_and_parse_node(node)
                 if condition.tp != bool:
                     raise TypeError('condition is not a valid bool')
                 if not self.node_compatibility(condition_value, else_value):
                     raise TypeError('values for if should be of same type')
-                st = f'(CASE WHEN {condition.st} THEN {condition_value.st} ELSE {else_value.st} END)'
+                st = '(CASE WHEN {} THEN {} ELSE {} END)'.format(
+                    condition.st,
+                    condition_value.st,
+                    else_value.st
+                )
                 return NodeReturn(st, condition_value.tp)
             case 'Call':
                 args = [self.parse_node(arg) for arg in node.args]
-                caller = None
                 func_name = ""
                 func = None
                 if type(node.func).__name__ == "Attribute":
@@ -176,14 +192,17 @@ class LambdaToSql(ast.NodeVisitor):
                     func_name = node.func.id
                     f = self.ctx_vars.get(func_name)
                     if f is not None:
-                        if isinstance(f, Callable):
+                        if callable(f):
                             func = f
-                        if type(f) == type(int) and all([arg.eval is not None for arg in args]):
+                        if type(f) is type(int) and all(
+                            [arg.eval is not None for arg in args]
+                        ):
                             res = f(*[arg.eval for arg in args])
-                            n = self.obj_to_node(res)
                             return self.parse_node(self.obj_to_node(res))
 
-                if func is not None and all([arg.eval is not None for arg in args]):
+                if func is not None and all([
+                    arg.eval is not None for arg in args
+                ]):
                     return self.evaluate_and_parse_node(node)
 
                 if caller is None:
@@ -192,12 +211,25 @@ class LambdaToSql(ast.NodeVisitor):
                         st, tp = found(
                             *[MethodArgument(arg.st, arg.tp) for arg in args])
                         return NodeReturn(st, tp)
-                else:
+                elif caller.tp is not None:
                     found = self.data_transformer.get_method(
                         caller.tp, func_name)
                     if found is not None:
-                        st, tp = found(MethodArgument(
-                            caller.st, caller.tp), *[MethodArgument(arg.st, arg.tp) for arg in args])
+                        method_list: list[MethodArgument] = []
+                        for arg in args:
+                            if arg.tp is None:
+                                raise TypeError(
+                                    f"argument {arg.st} is not defined"
+                                )
+                            else:
+                                method_list.append(MethodArgument(
+                                    arg.st,
+                                    arg.tp
+                                ))
+                        st, tp = found(
+                            MethodArgument(caller.st, caller.tp),
+                            *method_list
+                        )
                         return NodeReturn(st, tp)
                 raise ValueError(f'function {func_name} not found')
 
