@@ -42,9 +42,14 @@ CONNECTION_URL = "postgresql://{}:{}@{}/{}".format(
 
 
 def to_name(st: str) -> str:
-    if "." not in st:
-        st = "public." + st
-    return st
+    if "." in st:
+        return st
+    st_list = st.split()
+    st_list[0] = f'"{st_list[0]}"'
+    st = " ".join(st_list)
+    if st.startswith("public"):
+        return st
+    return "public." + st
 
 
 class PostgresQueryBuilder(QueryBuilder_Interface):
@@ -455,5 +460,5 @@ class PostgresDB(MemoryDB):
                 logger.error(f"{traceback.format_exc()} {e}")
                 return None
             finally:
-                if commit:
+                if self.__pg_connection:
                     self.__pg_connection.commit()

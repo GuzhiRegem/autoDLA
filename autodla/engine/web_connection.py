@@ -69,6 +69,7 @@ class WebConnection(ABC):
         self.endpoint_maker = endpoint_maker
         self.current_token = generate_token()
         self.setup_admin_endpoints()
+        self._current_admin_tokens: dict[str, datetime] = {}
         if setup_autodla_web:
             self.setup_autodla_web_static_files()
             self.setup_autodla_web_endpoints()
@@ -106,8 +107,6 @@ class WebConnection(ABC):
 
     # -- Admin token management
 
-    _current_admin_tokens: dict[str, datetime] = {}
-
     def create_new_admin_token(self) -> str:
         new_token = generate_token()
         self._current_admin_tokens[new_token] = datetime.now()
@@ -118,7 +117,7 @@ class WebConnection(ABC):
         for token, timestamp in self._current_admin_tokens.items():
             if (now - timestamp).total_seconds() > 60 * 60 * 3:
                 del self._current_admin_tokens[token]
-        if self._current_admin_tokens.get(token, None) is not None:
+        if self._current_admin_tokens.get(token, None) is None:
             self.unauthorized_handler()
         return True
 

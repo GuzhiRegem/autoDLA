@@ -142,7 +142,7 @@ class FastApiWebConnection(WebConnection):
             return func
 
         async def new_func(request: Request, *args, **kwargs):
-            return await func(request, *args, **kwargs)
+            return await func(*args, **kwargs)
         new_func.__signature__ = sig.replace(
             parameters=[
                 inspect.Parameter(
@@ -243,7 +243,6 @@ class FastApiWebConnection(WebConnection):
         web_router = self.create_static_router()
         self.app.include_router(web_router)
         for cls_type in self.db.classes:
-            print(f"Creating CRUD router for {cls_type.__name__}")
             r = self.create_crud_router(
                 cls_type,
                 auth_wrapper=self.admin_endpoint

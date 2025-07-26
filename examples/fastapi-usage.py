@@ -52,3 +52,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 conn = FastApiWebConnection(app, db)
+
+
+# Custom authentication endpoint
+@app.get("/custom")
+@conn.admin_endpoint
+async def custom_endpoint(name: Optional[str] = None):
+    if name:
+        return {"message": f"Hello, {name}!"}
+    return {"message": "Hello, World!"}

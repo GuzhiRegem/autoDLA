@@ -1,5 +1,5 @@
 import polars as pl
-from typing import Optional, Type, get_origin, get_args
+from typing import Callable, Optional, Type, get_origin, get_args
 from autodla.utils.logger import logger
 
 from autodla.engine.interfaces import (
@@ -86,7 +86,7 @@ class DB_Connection(DB_Connection_Interface):
         self,
         objects: list[Type[Object_Interface]]
     ) -> None:
-        ordered_objects = []
+        ordered_objects: list[Type[Object_Interface]] = []
         pending = objects[:]
         while True:
             if pending == []:
@@ -158,9 +158,10 @@ class DB_Connection(DB_Connection_Interface):
         table_name: str,
         schema: dict[str, Type],
         save: bool = False,
-        current_data_schema: Optional[dict[str, Type]] = None
+        current_data_schema: Optional[dict[str, Type]] = None,
+        execute_function: Optional[Callable] = None
     ) -> None:
-        logger.debug("ENSURE TABLE DBCONNECTION")
+        logger.debug(f"ENSURE TABLE {self.__class__.__name__} {table_name}")
         if save:
             self._table_schemas[table_name] = schema
             self._tables.append(table_name)
@@ -181,6 +182,8 @@ class DB_Connection(DB_Connection_Interface):
             return
         converted_schema = self.data_transformer.convert_data_schema(schema)
         table_name_db = self.get_table_name(table_name)
-        self.execute(self.query.drop_table(table_name_db.name, if_exists=True))
+        execute = (self.execute if execute_function is None
+                   else execute_function)
+        execute(self.query.drop_table(table_name_db.name, if_exists=True))
         qry = self.query.create_table(table_name_db.name, converted_schema)
-        self.execute(qry)
+        execute(qry)
