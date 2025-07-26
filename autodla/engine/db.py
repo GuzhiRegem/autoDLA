@@ -1,5 +1,5 @@
 import polars as pl
-from typing import Any, Optional, Type, get_origin, get_args
+from typing import Optional, Type, get_origin, get_args
 from autodla.utils.logger import logger
 
 from autodla.engine.interfaces import (
@@ -28,6 +28,9 @@ class DB_Connection(DB_Connection_Interface):
         raise NotImplementedError(
             "This method should be implemented in subclasses."
         )
+
+    def exit(self) -> None:
+        pass
 
     def __init__(
         self,
@@ -136,7 +139,7 @@ class DB_Connection(DB_Connection_Interface):
     def execute(
         self,
         query: str
-    ) -> pl.DataFrame:
+    ) -> Optional[pl.DataFrame]:
         return pl.DataFrame()
 
     def normalize_statement(

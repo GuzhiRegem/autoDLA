@@ -99,8 +99,8 @@ class DataTransformer_Interface(ABC):
     @abstractmethod
     def check_type_compatibility(
         cls,
-        tp1: Type,
-        tp2: Type
+        tp1: Optional[Type],
+        tp2: Optional[Type]
     ) -> bool:
         ...
 
@@ -482,6 +482,10 @@ class DB_Connection_Interface(ABC):
         ...
 
     @abstractmethod
+    def exit(self) -> None:
+        ...
+
+    @abstractmethod
     def __init__(
         self,
         data_transformer: DataTransformer_Interface,
@@ -540,7 +544,7 @@ class DB_Connection_Interface(ABC):
     def execute(
         self,
         query: str
-    ) -> pl.DataFrame:
+    ) -> Optional[pl.DataFrame]:
         ...
 
     @abstractmethod

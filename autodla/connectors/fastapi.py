@@ -1,19 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse
-from typing import Annotated, Callable,  get_type_hints
-from pydantic import create_model
+from typing import (
+    Annotated,
+    Callable,
+    List,
+    Optional,
+    Type,
+    Union,
+    get_type_hints
+)
+from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 import json
+from autodla.engine.interfaces import DB_Connection_Interface
+from autodla.engine.object import Object
 from autodla.engine.web_connection import EndpointMaker, WebConnection
 from autodla.engine.lambda_conversion import json_to_lambda_str
 import inspect
 import asyncio
 from contextlib import asynccontextmanager
 
+
 class FastApiEndpointMaker(EndpointMaker):
     @classmethod
-    def list(cls, object) -> Callable:
-        async def read_object(limit=10, skip=0, filter:str=None):
+    def list(cls, object: Type[Object]) -> Callable:
+        async def read_object(
+            limit: int = 10,
+            skip: int = 0,
+            filter: Optional[str] = None
+        ) -> List[dict]:
             if filter is None:
                 res = object.all(limit, skip=skip)
             else:
@@ -27,8 +42,10 @@ class FastApiEndpointMaker(EndpointMaker):
         return read_object
 
     @classmethod
-    def get(cls, object) -> Callable:
-        async def get_object_id(id_param: str):
+    def get(cls, object: Type[Object]) -> Callable:
+        async def get_object_id(
+            id_param: str
+        ) -> Union[dict, HTTPException]:
             res = object.get_by_id(id_param)
             if res is None:
                 return HTTPException(400, f'{object.__name__} not found')
@@ -36,8 +53,10 @@ class FastApiEndpointMaker(EndpointMaker):
         return get_object_id
 
     @classmethod
-    def get_history(cls, object) -> Callable:
-        async def get_object_history_id(id_param: str):
+    def get_history(cls, object: Type[Object]) -> Callable:
+        async def get_object_history_id(
+            id_param: str
+        ) -> Union[dict, HTTPException]:
             res = object.get_by_id(id_param)
             if res is None:
                 return HTTPException(400, f'{object.__name__} not found')
@@ -45,39 +64,68 @@ class FastApiEndpointMaker(EndpointMaker):
         return get_object_history_id
 
     @classmethod
-    def table(cls, object) -> Callable:
-        async def read_table(limit=10, skip=0, only_current=True, only_active=True):
-            res = object.get_table_res(limit=limit, skip=skip, only_current=only_current, only_active=only_active).to_dicts()
-            return res
+    def table(cls, object: Type[Object]) -> Callable:
+        async def read_table(
+            limit: int = 10,
+            skip: int = 0,
+            only_current: bool = True,
+            only_active: bool = True
+        ) -> Union[List[dict], HTTPException]:
+            if not (res := object.get_table_res(
+                limit=limit,
+                skip=skip,
+                only_current=only_current,
+                only_active=only_active
+            )):
+                return HTTPException(400, f'{object.__name__} not found')
+            return res.to_dicts()
         return read_table
 
     @classmethod
-    def new(cls, object) -> Callable:
+    def new(cls, object_class: Type[Object]) -> Callable:
         fields = get_type_hints(object)
-        RequestModel = create_model(f"{object.__name__}Request", **{k: (v, ...) for k, v in fields.items()})
-        async def create_object(obj: RequestModel):
-            n = object.new(**obj.model_dump())
+        RequestModel = type('RequestModel', (BaseModel,), fields)
+
+        async def create_object(obj: BaseModel):
+            n = object_class.new(**obj.model_dump())
             return n.to_dict()
+        create_object.__annotations__['obj'] = RequestModel
         return create_object
 
     @classmethod
-    def edit(cls, object) -> Callable:
+    def edit(cls, object: Type[Object]) -> Callable:
         async def edit_object(id_param, data: dict):
-            obj = object.get_by_id(id_param)
+            if (obj := object.get_by_id(id_param)) is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"{object.__name__} with id {id_param} not found"
+                )
             obj.update(**data)
             return obj.to_dict()
         return edit_object
 
     @classmethod
-    def delete(cls, object) -> Callable:
+    def delete(cls, object: Type[Object]) -> Callable:
+
         async def delete_object(id_param: str):
-            obj = object.get_by_id(id_param)
+            if (obj := object.get_by_id(id_param)) is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"{object.__name__} with id {id_param} not found"
+                )
             obj.delete()
             return {"status": "done"}
         return delete_object
 
+
 class FastApiWebConnection(WebConnection):
-    def __init__(self, app, db, setup_autodla_web=True, admin_endpoints_prefix='/autodla-admin'):
+    def __init__(
+        self,
+        app: FastAPI,
+        db: DB_Connection_Interface,
+        setup_autodla_web: bool = True,
+        admin_endpoints_prefix: str = '/autodla-admin'
+    ):
         self.app = app
         self.db = db
         if poll_watchdog := getattr(db, "poll_watchdog", None):
@@ -85,8 +133,8 @@ class FastApiWebConnection(WebConnection):
             async def lifespan(app):
                 asyncio.create_task(poll_watchdog())
                 yield
-            app.lifespan = lifespan
-            
+            app.lifespan = lifespan  # type: ignore
+
         self.admin_endpoints_prefix = admin_endpoints_prefix
         super().__init__(FastApiEndpointMaker(), setup_autodla_web)
 
@@ -94,22 +142,30 @@ class FastApiWebConnection(WebConnection):
         if not inspect.iscoroutinefunction(func):
             raise Exception("Admin endpoint must be an async function")
         return func
-    
+
     def normalize_endpoint(self, func):
         sig = inspect.signature(func)
         orig_params = list(sig.parameters.values())
         if orig_params and orig_params[0].name == "request":
             return func
-        async def new_func(request : Request, *args, **kwargs):
-            return await func(*args, **kwargs)
-        new_func.__signature__ = sig.replace(parameters=[inspect.Parameter("request", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Request)] + list(sig.parameters.values()))
+
+        async def new_func(request: Request, *args, **kwargs):
+            return await func(request, *args, **kwargs)
+        new_func.__signature__ = sig.replace(
+            parameters=[
+                inspect.Parameter(
+                    "request",
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    annotation=Request
+                )
+            ] + list(sig.parameters.values())
+        )
         new_func.__name__ = func.__name__
         new_func.__doc__ = func.__doc__
         sig = inspect.signature(new_func)
         orig_params = list(sig.parameters.values())
         return new_func
-    
-    
+
     async def extract_token(self, *args, **kwargs):
         request = kwargs.get("request") or (args[0] if args else None)
         auth_header = request.headers.get("Authorization")
@@ -117,25 +173,34 @@ class FastApiWebConnection(WebConnection):
             raise HTTPException(status_code=401, detail="Invalid token format")
         token = auth_header.split(" ")[1]
         return token
-    
+
     def setup_admin_endpoints(self):
-        self.admin_router = APIRouter(prefix="/admin", tags=[f"autodla_admin"])
+        self.admin_router = APIRouter(prefix="/admin", tags=["autodla_admin"])
 
         @self.admin_router.post("/token")
-        async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+        async def login(
+            form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+        ):
             current_token = self.login(form_data.username, form_data.password)
             return {"access_token": current_token, "token_type": "bearer"}
 
-        @self.admin_router.get(f'/get_json_schema')
+        @self.admin_router.get('/get_json_schema')
         @self.admin_endpoint
         async def get_schema():
             return self.db.get_json_schema()
-        
-        self.app.include_router(self.admin_router, prefix=self.admin_endpoints_prefix)
-        
 
+        self.app.include_router(
+            self.admin_router,
+            prefix=self.admin_endpoints_prefix
+        )
 
-    def create_crud_router(self, object, prefix=None, tags=[], auth_wrapper=None) -> APIRouter:
+    def create_crud_router(
+        self,
+        object,
+        prefix=None,
+        tags=[],
+        auth_wrapper=None
+    ) -> APIRouter:
         if prefix is None:
             prefix = f"/{object.__name__}"
         if tags == []:
@@ -157,28 +222,31 @@ class FastApiWebConnection(WebConnection):
                 endpoint_func = auth_wrapper(endpoint_func)
             router_wrapper(path)(endpoint_func)
         return router
-    
+
     def create_static_router(self):
         static_temp_dir = self.static_temp_dir
-        web_router = APIRouter(prefix="/autodla-web", tags=[f"autodla_web"])
+        web_router = APIRouter(prefix="/autodla-web", tags=["autodla_web"])
         sub_directories = ['', 'assets/']
         for sub_directory in sub_directories:
+
             @web_router.get('/' + sub_directory + '{filename}')
-            async def static_files(filename = 'index.html'):
-                return FileResponse(f'{static_temp_dir}/{sub_directory}{filename}')
+            async def static_files(filename: str = 'index.html'):
+                return FileResponse(
+                    f'{static_temp_dir}/{sub_directory}{filename}'
+                )
+
         @web_router.get('/')
         async def static_home():
             return FileResponse(f'{static_temp_dir}/index.html')
         return web_router
-    
+
     def setup_autodla_web_endpoints(self):
         web_router = self.create_static_router()
         self.app.include_router(web_router)
         for cls in self.db.classes:
             r = self.create_crud_router(cls, auth_wrapper=self.admin_endpoint)
             self.app.include_router(r, prefix=self.admin_endpoints_prefix)
-    
-    
+
     @classmethod
     def unauthorized_handler(cls):
         raise HTTPException(
@@ -186,7 +254,10 @@ class FastApiWebConnection(WebConnection):
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     @classmethod
     def invalid_admin_credentials_handler(cls):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=400,
+            detail="Incorrect username or password"
+        )

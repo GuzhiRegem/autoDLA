@@ -4,17 +4,17 @@ from dataclasses import field, _MISSING_TYPE
 from datetime import datetime
 from types import NoneType
 from typing import (
-        Any,
-        Callable,
-        List,
-        Optional,
-        Type,
-        TypeVar,
-        Union,
-        get_origin,
-        ClassVar,
-        Literal,
-        get_args
+    Any,
+    Callable,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    get_origin,
+    ClassVar,
+    Literal,
+    get_args
 )
 import uuid
 import polars as pl
@@ -36,8 +36,8 @@ def _default(self, obj):
     return getattr(obj.__class__, "to_json", _default.default)(obj)
 
 
-_default.default = JSONEncoder().default
-JSONEncoder.default = _default
+_default.default = JSONEncoder().default  # type: ignore
+JSONEncoder.default = _default  # type: ignore
 
 primary_key_type = TypeVar('primary_key_type', bound='primary_key')
 
@@ -206,13 +206,13 @@ class Table(Table_Interface):
 
 class Object(Object_Interface):
     class DependencyRequiredIds(BaseModel):
-        type: 'Object_Interface'
+        type: 'Type[Object_Interface]'
         ids: set[str]
 
     class ObjectDependency(BaseModel):
         is_list: bool
         is_value: bool
-        type: 'Object_Interface'
+        type: Type['Object_Interface']
         table: Table
     __table: ClassVar[Optional[Table | None]] = None
     __dependencies: ClassVar[dict[str, ObjectDependency]] = field(
@@ -259,11 +259,11 @@ class Object(Object_Interface):
                     + f"{cls.__name__.lower()}"\
                     + f"__{k}__"\
                     + f"{i['depends'].__name__.lower()}"
-                dependencies[k] = Object.ObjectDependency(**{
-                    'is_list': i.get("is_list") is True,
-                    'is_value': False,
-                    'type': i['depends'],
-                    'table': Table(
+                dependencies[k] = Object.ObjectDependency(
+                    is_list=i.get("is_list") is True,
+                    is_value=False,
+                    type=i['depends'],
+                    table=Table(
                         table_name,
                         {
                             "connection_id": {
@@ -281,14 +281,14 @@ class Object(Object_Interface):
                         },
                         db
                     )
-                })
-            elif 'is_list' in i:
+                )
+            elif 'is_list' in i and i["type"] is not None:
                 table_name = f"{cls.__name__.lower()}__{k}"
-                dependencies[k] = Object.ObjectDependency(**{
-                    'is_list': i.get("is_list") is True,
-                    'is_value': True,
-                    'type': i["type"],
-                    'table': Table(
+                dependencies[k] = Object.ObjectDependency(
+                    is_list=i.get("is_list") is True,
+                    is_value=True,
+                    type=i["type"],
+                    table=Table(
                         table_name,
                         {
                             "connection_id": {
@@ -306,7 +306,7 @@ class Object(Object_Interface):
                         },
                         db
                     )
-                })
+                )
         for key in dependencies.keys():
             del schema[key]
         cls.__table = Table(cls.__name__.lower(), {
@@ -420,7 +420,7 @@ class Object(Object_Interface):
             ids: set[str] = set(table_results[k]['second_id'].to_list())
             t_name: str = v.type.__class__.__name__
             if t_name not in dep_tables_required_ids:
-                tp: 'Object_Interface' = v.type
+                tp: 'Type[Object_Interface]' = v.type
                 dep_tables_required_ids[t_name] = Object.DependencyRequiredIds(
                     type=tp, ids=ids
                 )
@@ -431,7 +431,7 @@ class Object(Object_Interface):
         dep_tables: dict[str, dict[str, "Object_Interface"]] = {}
         for k_, v_ in dep_tables_required_ids.items():
             l: list[str] = list(v_.ids)
-            tp_: 'Object_Interface' = v_.type
+            tp_: 'Type[Object_Interface]' = v_.type
             id_field = tp_.identifier_field
             dep_tables[k_] = {}
             if len(l) == 0:
@@ -601,7 +601,7 @@ class Object(Object_Interface):
             setattr(self, key, value)
         self.__table.update(lambda x: x[self.identifier_field] == self[
             self.identifier_field], {
-                            'DLA_is_current': False})
+            'DLA_is_current': False})
         self.__table.insert({**data, **dla_data_insert()})
 
     def delete(self) -> None:
@@ -651,7 +651,7 @@ class Object(Object_Interface):
                 dependency.table.insert(j)
         self.__table.update(lambda x: x[self.identifier_field] == self[
             self.identifier_field], {
-                            'DLA_is_current': False})
+            'DLA_is_current': False})
         self.__table.insert({**data, **dla_data_delete()})
 
     @classmethod

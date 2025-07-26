@@ -1,6 +1,7 @@
 import time
 from typing import Callable
 
+
 class Watchdog:
     def __init__(self, timeout: float, on_timeout: Callable):
         self.timeout = timeout
