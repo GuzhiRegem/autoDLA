@@ -13,6 +13,8 @@ class User(Object):
     id: primary_key = primary_key.auto_increment()
     name: str
     age: int
+    tags: list[str] = list()
+
 
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
@@ -26,7 +28,7 @@ db = PostgresDB()
 db.attach([User, Group])
 
 
-#setup DB
+# setup DB
 db.clean_db(DO_NOT_ASK=True)
 lis = []
 for i in range(2):

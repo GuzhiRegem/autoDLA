@@ -10,9 +10,10 @@ class User(Object):
     name: str
     age: int
 
+
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
-    participants: list[User] # Nested structure
+    participants: list[User]  # Nested structure
     group_name: str
 
 
