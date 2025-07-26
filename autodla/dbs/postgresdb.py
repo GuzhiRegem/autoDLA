@@ -48,6 +48,9 @@ def to_name(st: str) -> str:
 
 
 class PostgresQueryBuilder(QueryBuilder_Interface):
+    def __init__(self, data_transformer: DataTransformer) -> None:
+        self._data_transformer = data_transformer
+
     def select(
         self,
         from_table: str,
@@ -239,7 +242,7 @@ class PostgresDB(MemoryDB):
             await asyncio.sleep(1)
             self.watchdog.check()
 
-    def execute(self, statement, commit=True):
+    def execute(self, statement):
         if self.__atached:
             self.watchdog.reset()
             if not self.__mid_sync:
@@ -248,7 +251,7 @@ class PostgresDB(MemoryDB):
                 ).total_seconds()
                 if datetime_diff > DB_FLUSH_TIME:
                     self.sync()
-        res = super().execute(statement, commit)
+        res = super().execute(statement)
         return res
 
     def attach(self, objects):

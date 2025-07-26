@@ -1,10 +1,10 @@
 import sqlite3
 from typing import List, Optional
 import polars as pl
+from autodla.engine.data_conversion import DataTransformer
 from autodla.engine.db import DB_Connection, TableName
 from autodla.engine.interfaces import (
     QueryBuilder_Interface,
-    DataTransformer_Interface,
     DataConversion
 )
 from autodla.engine.object import primary_key
@@ -31,6 +31,10 @@ def to_name(st):
 
 
 class MemoryQueryBuilder(QueryBuilder_Interface):
+
+    def __init__(self, data_transformer: DataTransformer) -> None:
+        self._data_transformer = data_transformer
+
     def select(
         self,
         from_table: str,
@@ -110,7 +114,7 @@ class MemoryQueryBuilder(QueryBuilder_Interface):
         return qry
 
 
-class MemoryDataTransformer(DataTransformer_Interface):
+class MemoryDataTransformer(DataTransformer):
     TYPE_DICT = {
         UUID: DataConversion("TEXT", lambda x: f"'{x}'"),
         primary_key: DataConversion("TEXT", lambda x: f"'{x}'"),

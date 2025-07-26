@@ -13,7 +13,7 @@ from typing import (
     List
 )
 import polars as pl
-from pydantic import BaseModel, GetCoreSchemaHandler
+from pydantic import BaseModel, ConfigDict, GetCoreSchemaHandler
 from pydantic_core import CoreSchema
 
 from abc import ABC, abstractmethod
@@ -292,7 +292,7 @@ class Table_Interface(ABC):
         only_current: bool = True,
         only_active: bool = True,
         skip: int = 0
-    ) -> pl.DataFrame:
+    ) -> Optional[pl.DataFrame]:
         ...
 
     @abstractmethod
@@ -303,7 +303,7 @@ class Table_Interface(ABC):
         only_current: bool = True,
         only_active: bool = True,
         skip: int = 0
-    ) -> pl.DataFrame:
+    ) -> Optional[pl.DataFrame]:
         ...
 
     @abstractmethod
@@ -327,14 +327,15 @@ class Table_Interface(ABC):
 
 
 class Object_Interface(BaseModel, ABC):
-    class DependencyRequiredIds(BaseModel, ABC):
-        type: 'Object_Interface'
+    class DependencyRequiredIds(BaseModel):
+        type: Type['Object_Interface']
         ids: set[str]
 
-    class ObjectDependency(BaseModel, ABC):
+    class ObjectDependency(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
         is_list: bool
         is_value: bool
-        type: 'Object_Interface'
+        type: Type['Object_Interface']
         table: 'Table_Interface'
     __table: ClassVar[Optional['Table_Interface']]
     __dependencies: ClassVar[dict[str, ObjectDependency]]
@@ -370,18 +371,18 @@ class Object_Interface(BaseModel, ABC):
 
     @classmethod
     @abstractmethod
-    def __update_individual(
+    def _update_individual(
         cls,
         data_inp: dict[str, Any]
-    ) -> Optional['Object_Interface' | None]:
+    ) -> Optional['Object_Interface']:
         ...
 
     @classmethod
     @abstractmethod
-    def __update_info(
+    def _update_info(
         cls,
         filter: Optional[Callable[[Any], bool]] = None,
-        limit: int = 10,
+        limit: Optional[int] = 10,
         skip: int = 0,
         only_current: bool = True,
         only_active: bool = True
@@ -409,7 +410,7 @@ class Object_Interface(BaseModel, ABC):
     @abstractmethod
     def all(
         cls,
-        limit: int = 10,
+        limit: Optional[int] = 10,
         skip: int = 0
     ) -> list["Object_Interface"]:
         ...
@@ -419,7 +420,7 @@ class Object_Interface(BaseModel, ABC):
     def filter(
         cls,
         lambda_f: Optional[Callable[[Any], bool]],
-        limit: int = 10,
+        limit: Optional[int] = 10,
         skip: int = 0
     ) -> list["Object_Interface"]:
         ...
