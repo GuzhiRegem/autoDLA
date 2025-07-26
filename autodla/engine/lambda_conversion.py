@@ -378,10 +378,13 @@ def get_context_from_lamba(lambda_func) -> dict[str, Any]:
     file = lambda_func.__code__.co_filename
     line = lambda_func.__code__.co_firstlineno
     found = None
+    last_line = -1
     for frame in inspect.stack():
-        if frame.filename == file and frame.lineno == line:
+        if frame.filename != file:
+            continue
+        if frame.lineno > last_line and frame.lineno <= line:
+            last_line = frame.lineno
             found = frame
-            break
     if found is None:
         raise ValueError('frame not found')
     return {**vars(builtins), **found.frame.f_locals}
