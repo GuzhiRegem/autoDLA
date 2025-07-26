@@ -19,7 +19,7 @@ from typing import (
 import uuid
 import polars as pl
 from autodla.engine.lambda_conversion import lambda_to_sql
-from pydantic import BaseModel, GetCoreSchemaHandler
+from pydantic import GetCoreSchemaHandler
 from pydantic_core import CoreSchema, core_schema, PydanticUndefinedType
 from autodla.utils.logger import logger
 from autodla.engine.interfaces import (
@@ -128,7 +128,7 @@ class Table(Table_Interface):
             only_current: bool = True,
             only_active: bool = True,
             skip: int = 0
-    ) -> pl.DataFrame:
+    ) -> Optional[pl.DataFrame]:
         conditions = ["TRUE"]
         if only_current:
             conditions.append("DLA_is_current = true")
@@ -154,7 +154,7 @@ class Table(Table_Interface):
             only_current: bool = True,
             only_active: bool = True,
             skip: int = 0
-    ) -> pl.DataFrame:
+    ) -> Optional[pl.DataFrame]:
         conditions = [
             lambda_to_sql(
                 self.schema,
@@ -205,22 +205,15 @@ class Table(Table_Interface):
 
 
 class Object(Object_Interface):
-    class DependencyRequiredIds(BaseModel):
-        type: 'Type[Object_Interface]'
-        ids: set[str]
-
-    class ObjectDependency(BaseModel):
-        is_list: bool
-        is_value: bool
-        type: Type['Object_Interface']
-        table: Table
     __table: ClassVar[Optional[Table | None]] = None
-    __dependencies: ClassVar[dict[str, ObjectDependency]] = field(
-        default_factory=dict
+    __dependencies: ClassVar[dict[str, Object_Interface.ObjectDependency]] = (
+        field(
+            default_factory=dict
+        )
     )
     identifier_field: ClassVar[str] = "id"
-    __objects_list: ClassVar[List['Object']] = field(default_factory=list)
-    __objects_map: ClassVar[dict[str, 'Object']] = field(default_factory=dict)
+    __objects_list: ClassVar[List['Object']] = list()
+    __objects_map: ClassVar[dict[str, 'Object']] = dict()
 
     @classmethod
     def delete_all(cls) -> None:
@@ -358,10 +351,10 @@ class Object(Object_Interface):
         return out
 
     @classmethod
-    def __update_individual(
-            cls,
-            data_inp: dict[str, Any]
-    ) -> Optional['Object_Interface' | None]:
+    def _update_individual(
+        cls,
+        data_inp: dict[str, Any]
+    ) -> Optional['Object_Interface']:
         logger.debug(f"UPDATE INDIVIDUAL: {cls} {data_inp}")
         data: dict[str, Any] = {}
         for k, v in data_inp.items():
@@ -383,13 +376,13 @@ class Object(Object_Interface):
         return obj
 
     @classmethod
-    def __update_info(
-            cls,
-            filter: Optional[Callable | None] = None,
-            limit: int = 10,
-            skip: int = 0,
-            only_current: bool = True,
-            only_active: bool = True
+    def _update_info(
+        cls,
+        filter: Optional[Callable[[Any], bool]] = None,
+        limit: Optional[int] = 10,
+        skip: int = 0,
+        only_current: bool = True,
+        only_active: bool = True
     ) -> list['Object_Interface']:
         if cls.__table is None:
             return []
@@ -404,25 +397,33 @@ class Object(Object_Interface):
             obj_lis = res.to_dicts()
         if obj_lis == []:
             return []
+        if res is None:
+            return []
         id_list = res[cls.identifier_field].to_list()
 
-        table_results = {}
-        dep_tables_required_ids: dict[str, Object.DependencyRequiredIds] = {}
+        table_results: dict[str, Optional[pl.DataFrame]] = {}
+        dep_tables_required_ids: dict[
+            str, Object_Interface.DependencyRequiredIds] = {}
         for k, v in cls.__dependencies.items():
             if v.is_value:
                 continue
-            dep_table_: Table = v.table
+            dep_table_: Table_Interface = v.table
             table_results[k] = dep_table_.filter(
                 lambda x: x.first_id in id_list,
                 None, only_current=only_current,
                 only_active=only_active
             )
-            ids: set[str] = set(table_results[k]['second_id'].to_list())
+            ids: set[str] = set()
+            df: Optional[pl.DataFrame] = table_results[k]
+            if df is not None:
+                ids = set(df['second_id'].to_list())
             t_name: str = v.type.__class__.__name__
             if t_name not in dep_tables_required_ids:
                 tp: 'Type[Object_Interface]' = v.type
-                dep_tables_required_ids[t_name] = Object.DependencyRequiredIds(
-                    type=tp, ids=ids
+                dep_tables_required_ids[t_name] = (
+                    Object_Interface.DependencyRequiredIds(
+                        type=tp, ids=ids
+                    )
                 )
             else:
                 row = dep_tables_required_ids[t_name]
@@ -447,17 +448,19 @@ class Object(Object_Interface):
                 dep: Object.ObjectDependency = cls.__dependencies[dep_key]
                 if dep.is_value:
                     obj_id: primary_key = obj_dic[cls.identifier_field]
-                    dep_table: Table = dep.table
-                    table_df: pl.DataFrame = dep_table.filter(
+                    dep_table: Table_Interface = dep.table
+                    table_df: Optional[pl.DataFrame] = dep_table.filter(
                         lambda x: x.first_id == obj_id
                     )
-                    table_res: list[Any] = table_df['value'].to_list()
+                    table_res: list[Any] = []
+                    if table_df is not None:
+                        table_res = table_df['value'].to_list()
                     obj_dic[dep_key] = table_res
                     continue
                 df = table_results[dep_key]
                 val_lis = []
                 t_name = dep.type.__class__.__name__
-                if len(df) > 0:
+                if df is not None and len(df) > 0:
                     lis = df.filter(
                         df['first_id'] == obj[cls.identifier_field]
                     )[
@@ -472,7 +475,7 @@ class Object(Object_Interface):
                         obj_dic[dep_key] = obj[dep_key][0]
                     else:
                         obj_dic[dep_key] = None
-            update_obj: Optional['Object_Interface'] = cls.__update_individual(
+            update_obj: Optional['Object_Interface'] = cls._update_individual(
                 obj_dic)
             if update_obj is not None:
                 out.append(update_obj)
@@ -538,14 +541,14 @@ class Object(Object_Interface):
             only_active=False,
             only_current=False
         )
-        out: dict[str, Union[list[dict[str, Any]]]] = {
-            "self": self_res.to_dicts(),
+        out: dict[str, list[dict[str, Any]]] = {
+            "self": self_res.to_dicts() if self_res is not None else [],
         }
         for k, v in self.__dependencies.items():
             dep_res = v.table.filter(lambda x: x.first_id == getattr(
                 self, self.identifier_field), limit=None, only_active=False,
                 only_current=False)
-            out[k] = dep_res.to_dicts()
+            out[k] = dep_res.to_dicts() if dep_res is not None else []
         return out
 
     def update(self, **kwargs) -> None:
@@ -656,27 +659,30 @@ class Object(Object_Interface):
 
     @classmethod
     def all(cls, limit=10, skip=0) -> list[Object_Interface]:
-        out = cls.__update_info(limit=limit, skip=skip)
+        out = cls._update_info(limit=limit, skip=skip)
         return out
 
     @classmethod
     def filter(cls, lambda_f, limit=10, skip=0) -> list[Object_Interface]:
-        out = cls.__update_info(filter=lambda_f, limit=limit, skip=skip)
+        out = cls._update_info(filter=lambda_f, limit=limit, skip=skip)
         return out
 
     @classmethod
     def get_by_id(cls, id_param) -> Optional["Object"]:
-        cls.__update_info(
+        cls._update_info(
             lambda x: x[cls.identifier_field] == id_param, limit=1, skip=0)
         return cls.__objects_map.get(id_param)
 
     @classmethod
-    def get_table_res(cls, limit=10, skip=0, only_current=True,
-                      only_active=True) -> Optional[pl.DataFrame]:
+    def get_table_res(
+        cls, limit=10, skip=0, only_current=True,
+        only_active=True
+    ) -> Optional[pl.DataFrame]:
         if cls.__table is None:
             return None
-        return cls.__table.get_all(limit=limit, only_current=only_current,
-                                   only_active=only_active, skip=skip)
+        return cls.__table.get_all(
+            limit=limit, only_current=only_current,
+            only_active=only_active, skip=skip)
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()

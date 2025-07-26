@@ -3,13 +3,9 @@ from fastapi.responses import FileResponse
 from typing import (
     Annotated,
     Callable,
-    List,
     Optional,
     Type,
-    Union,
-    get_type_hints
 )
-from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 import json
 from autodla.engine.interfaces import DB_Connection_Interface
@@ -28,7 +24,7 @@ class FastApiEndpointMaker(EndpointMaker):
             limit: int = 10,
             skip: int = 0,
             filter: Optional[str] = None
-        ) -> List[dict]:
+        ):
             if filter is None:
                 res = object.all(limit, skip=skip)
             else:
@@ -45,7 +41,7 @@ class FastApiEndpointMaker(EndpointMaker):
     def get(cls, object: Type[Object]) -> Callable:
         async def get_object_id(
             id_param: str
-        ) -> Union[dict, HTTPException]:
+        ):
             res = object.get_by_id(id_param)
             if res is None:
                 return HTTPException(400, f'{object.__name__} not found')
@@ -56,7 +52,7 @@ class FastApiEndpointMaker(EndpointMaker):
     def get_history(cls, object: Type[Object]) -> Callable:
         async def get_object_history_id(
             id_param: str
-        ) -> Union[dict, HTTPException]:
+        ):
             res = object.get_by_id(id_param)
             if res is None:
                 return HTTPException(400, f'{object.__name__} not found')
@@ -70,7 +66,7 @@ class FastApiEndpointMaker(EndpointMaker):
             skip: int = 0,
             only_current: bool = True,
             only_active: bool = True
-        ) -> Union[List[dict], HTTPException]:
+        ):
             if not (res := object.get_table_res(
                 limit=limit,
                 skip=skip,
@@ -83,13 +79,9 @@ class FastApiEndpointMaker(EndpointMaker):
 
     @classmethod
     def new(cls, object_class: Type[Object]) -> Callable:
-        fields = get_type_hints(object)
-        RequestModel = type('RequestModel', (BaseModel,), fields)
-
-        async def create_object(obj: BaseModel):
+        async def create_object(obj: Object):
             n = object_class.new(**obj.model_dump())
             return n.to_dict()
-        create_object.__annotations__['obj'] = RequestModel
         return create_object
 
     @classmethod
@@ -196,15 +188,15 @@ class FastApiWebConnection(WebConnection):
 
     def create_crud_router(
         self,
-        object,
+        object_class: Type[Object],
         prefix=None,
         tags=[],
         auth_wrapper=None
     ) -> APIRouter:
         if prefix is None:
-            prefix = f"/{object.__name__}"
+            prefix = f"/{object_class.__name__}"
         if tags == []:
-            tags = [f"autodla_{object.__name__}"]
+            tags = [f"autodla_{object_class.__name__}"]
         router = APIRouter(prefix=prefix, tags=tags)
         endpoints = [
             ("list", "get", "/list"),
@@ -216,10 +208,17 @@ class FastApiWebConnection(WebConnection):
             ("delete", "delete", "/delete/{id_param}")
         ]
         for func_name, method, path in endpoints:
-            endpoint_func = getattr(self.endpoint_maker, func_name)(object)
+            endpoint_func = getattr(
+                self.endpoint_maker, func_name
+            )(object_class)
             router_wrapper = getattr(router, method)
             if auth_wrapper is not None:
                 endpoint_func = auth_wrapper(endpoint_func)
+            router_args = {
+                "path": path
+            }
+            if method == "new":
+                router_args["response_model"] = object_class.__name__
             router_wrapper(path)(endpoint_func)
         return router
 
@@ -243,8 +242,12 @@ class FastApiWebConnection(WebConnection):
     def setup_autodla_web_endpoints(self):
         web_router = self.create_static_router()
         self.app.include_router(web_router)
-        for cls in self.db.classes:
-            r = self.create_crud_router(cls, auth_wrapper=self.admin_endpoint)
+        for cls_type in self.db.classes:
+            print(f"Creating CRUD router for {cls_type.__name__}")
+            r = self.create_crud_router(
+                cls_type,
+                auth_wrapper=self.admin_endpoint
+            )
             self.app.include_router(r, prefix=self.admin_endpoints_prefix)
 
     @classmethod
