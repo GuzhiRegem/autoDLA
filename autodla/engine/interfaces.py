@@ -335,7 +335,7 @@ class Object_Interface(BaseModel, ABC):
         model_config = ConfigDict(arbitrary_types_allowed=True)
         is_list: bool
         is_value: bool
-        type: Type['Object_Interface']
+        type: Type
         table: 'Table_Interface'
     __table: ClassVar[Optional['Table_Interface']]
     __dependencies: ClassVar[dict[str, ObjectDependency]]
