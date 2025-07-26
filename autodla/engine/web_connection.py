@@ -145,6 +145,7 @@ class WebConnection(ABC):
         async def wrapper(*args, **kwargs):
             token = await self.extract_token(*args, **kwargs)
             self.validate_token(token)
+            print(func, args, kwargs)
             return await func(*args, **kwargs)
         return wrapper
 

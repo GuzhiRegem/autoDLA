@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from typing import (
     Annotated,
+    Any,
     Callable,
     Optional,
     Type,
@@ -79,7 +80,9 @@ class FastApiEndpointMaker(EndpointMaker):
 
     @classmethod
     def new(cls, object_class: Type[Object]) -> Callable:
-        async def create_object(obj: Object):
+        async def create_object(request: Request):
+            obj = object_class(**(await request.json()))
+            print(obj)
             n = object_class.new(**obj.model_dump())
             return n.to_dict()
         return create_object
