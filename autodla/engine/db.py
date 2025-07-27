@@ -159,8 +159,18 @@ class DB_Connection(DB_Connection_Interface):
         schema: dict[str, Type],
         save: bool = False,
         current_data_schema: Optional[dict[str, Type]] = None,
-        execute_function: Optional[Callable] = None
+        execute_function: Optional[
+            Callable[[str], Optional[pl.DataFrame]]] = None,
+        query_builder: Optional[QueryBuilder_Interface] = None,
+        data_transformer: Optional[DataTransformer_Interface] = None,
+        change_name=True
     ) -> None:
+        if execute_function is None:
+            execute_function = self.execute
+        if query_builder is None:
+            query_builder = self.query
+        if data_transformer is None:
+            data_transformer = self.data_transformer
         logger.debug(f"ENSURE TABLE {self.__class__.__name__} {table_name}")
         if save:
             self._table_schemas[table_name] = schema
@@ -169,7 +179,7 @@ class DB_Connection(DB_Connection_Interface):
         if current_data_schema is None:
             current_data_schema = self.get_table_definition(table_name)
         if all([
-            self.data_transformer.check_type_compatibility(
+            data_transformer.check_type_compatibility(
                 data_schema.get(k), current_data_schema.get(k)
             ) for k in list(
                 set(data_schema.keys()).union(set(data_schema.keys()))
@@ -180,10 +190,25 @@ class DB_Connection(DB_Connection_Interface):
         logger.debug(current_data_schema)
         if data_schema == current_data_schema:
             return
-        converted_schema = self.data_transformer.convert_data_schema(schema)
-        table_name_db = self.get_table_name(table_name)
-        execute = (self.execute if execute_function is None
-                   else execute_function)
-        execute(self.query.drop_table(table_name_db.name, if_exists=True))
-        qry = self.query.create_table(table_name_db.name, converted_schema)
-        execute(qry)
+        converted_schema = data_transformer.convert_data_schema(schema)
+        table_name_db = (
+            self.get_table_name(table_name).name
+            if change_name else table_name
+        )
+        execute_function(
+            query_builder.drop_table(table_name_db, if_exists=True))
+        qry = query_builder.create_table(table_name_db, converted_schema)
+        execute_function(qry)
+        updated_data_schema = self.get_table_definition(table_name)
+        print('UPDATED DATA SCHEMA:', updated_data_schema)
+        key: str  # type annotation for key
+        for key in set(
+            *[list(updated_data_schema.keys()) + list(data_schema.keys())]
+        ):
+            if key not in updated_data_schema or key not in data_schema:
+                print("------------------")
+                print(updated_data_schema)
+                print()
+                print(data_schema)
+                print("------------------")
+                raise ValueError("DATA SCHEMA NOT UPDATED")

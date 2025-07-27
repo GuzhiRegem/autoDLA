@@ -4,7 +4,7 @@ from autodla.engine.data_conversion import DataTransformer, DataConversion
 from autodla.engine.interfaces import QueryBuilder_Interface
 from autodla.engine.object import primary_key
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 from autodla.utils.logger import logger
 from uuid import UUID
 import os
@@ -16,22 +16,22 @@ import traceback
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
-    DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT")
+    DATETIME_FORMAT = os.environ.get("DATETIME_FORMAT", "")
 POSTGRES_USER = 'postgres'
 if "AUTODLA_POSTGRES_USER" in os.environ:
-    POSTGRES_USER = os.environ.get("AUTODLA_POSTGRES_USER")
+    POSTGRES_USER = os.environ.get("AUTODLA_POSTGRES_USER", "")
 POSTGRES_PASSWORD = 'password'
 if "AUTODLA_POSTGRES_PASSWORD" in os.environ:
-    POSTGRES_PASSWORD = os.environ.get("AUTODLA_POSTGRES_PASSWORD")
+    POSTGRES_PASSWORD = os.environ.get("AUTODLA_POSTGRES_PASSWORD", "")
 POSTGRES_URL = 'localhost'
 if "AUTODLA_POSTGRES_HOST" in os.environ:
-    POSTGRES_URL = os.environ.get("AUTODLA_POSTGRES_HOST")
+    POSTGRES_URL = os.environ.get("AUTODLA_POSTGRES_HOST", "")
 POSTGRES_DB = 'my_db'
 if "AUTODLA_POSTGRES_DB" in os.environ:
-    POSTGRES_DB = os.environ.get("AUTODLA_POSTGRES_DB")
+    POSTGRES_DB = os.environ.get("AUTODLA_POSTGRES_DB", "")
 DB_FLUSH_TIME = 60
 if "AUTODLA_DB_FLUSH_TIME" in os.environ:
-    DB_FLUSH_TIME = int(os.environ.get("AUTODLA_DB_FLUSH_TIME"))
+    DB_FLUSH_TIME = int(os.environ.get("AUTODLA_DB_FLUSH_TIME", ""))
 
 CONNECTION_URL = "postgresql://{}:{}@{}/{}".format(
     POSTGRES_USER,
@@ -272,7 +272,12 @@ class PostgresDB(MemoryDB):
             self.ensure_table(
                 table,
                 self._table_schemas[table],
-                current_data_schema=self._get_table_definition(table))
+                current_data_schema=self._get_table_definition(table),
+                execute_function=self._execute,
+                query_builder=self.__pg_query,
+                data_transformer=self.__pg_dt,
+                change_name=False
+            )
         self.__atached = True
         self.sync()
         logger.debug("Attached objects to PostgreSQL...\n")
@@ -332,7 +337,7 @@ class PostgresDB(MemoryDB):
         for table_name, df in final_snapshot.items():
 
             def get_change_querys(
-                    snapshot: dict[str, pl.DataFrame],
+                    snapshot: pl.DataFrame,
                     query_executor: QueryBuilder_Interface
             ) -> List[str]:
                 out = []
@@ -402,12 +407,12 @@ class PostgresDB(MemoryDB):
         )], commit=False)
         out = {}
         if res is not None:
-            res = res.to_dicts()
+            res_dict = res.to_dicts()
             conversion_dict = {
                 "boolean": "bool",
                 "timestamp without time zone": "timestamp"
             }
-            for row in res:
+            for row in res_dict:
                 if row['data_type'] in conversion_dict:
                     row['data_type'] = conversion_dict[row['data_type']]
                 out[row['column_name'].upper()] = (
@@ -417,9 +422,11 @@ class PostgresDB(MemoryDB):
 
     def _execute(
         self,
-        statements: list,
+        statements: Union[list, str],
         commit=True
     ) -> Optional[pl.DataFrame | None]:
+        if self.__pg_connection is None:
+            return None
         self.__querys_executed_postgres += 1
         statements = (
             statements
@@ -460,5 +467,5 @@ class PostgresDB(MemoryDB):
                 logger.error(f"{traceback.format_exc()} {e}")
                 return None
             finally:
-                if self.__pg_connection:
-                    self.__pg_connection.commit()
+                self.__pg_connection.commit()
+                logger.debug("POSTGRES COMMIT")
