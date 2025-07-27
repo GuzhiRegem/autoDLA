@@ -370,7 +370,7 @@ class Object(Object_Interface):
         if found is not None:
             found.__dict__.update(data)
             return found
-        obj = cls(**data)
+        obj: 'Object' = cls(**data)
         cls.__objects_list.append(obj)
         cls.__objects_map[obj[cls.identifier_field]] = obj
         return obj
@@ -462,7 +462,7 @@ class Object(Object_Interface):
                 t_name = dep.type.__class__.__name__
                 if df is not None and len(df) > 0:
                     lis = df.filter(
-                        df['first_id'] == obj[cls.identifier_field]
+                        df['first_id'] == obj_dic[cls.identifier_field]
                     )[
                         'second_id'].to_list()
                     for row in lis:
@@ -471,7 +471,7 @@ class Object(Object_Interface):
                             val_lis.append(val)
                 obj_dic[dep_key] = val_lis
                 if not cls.__dependencies[dep_key].is_list:
-                    if obj[dep_key] != []:
+                    if obj_dic[dep_key] != []:
                         obj_dic[dep_key] = obj[dep_key][0]
                     else:
                         obj_dic[dep_key] = None

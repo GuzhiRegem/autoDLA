@@ -258,9 +258,8 @@ class primary_key_Interface(str, ABC):
     ) -> CoreSchema:
         ...
 
-    @abstractmethod
     def __hash__(self) -> int:
-        ...
+        return super().__hash__()
 
 
 class Table_Interface(ABC):
