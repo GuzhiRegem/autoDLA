@@ -545,8 +545,9 @@ class Object(Object_Interface):
             "self": self_res.to_dicts() if self_res is not None else [],
         }
         for k, v in self.__dependencies.items():
-            dep_res = v.table.filter(lambda x: x.first_id == getattr(
-                self, self.identifier_field), limit=None, only_active=False,
+            dep_res = v.table.filter(
+                lambda x: x.first_id == getattr(self, self.identifier_field),
+                limit=None, only_active=False,
                 only_current=False)
             out[k] = dep_res.to_dicts() if dep_res is not None else []
         return out
@@ -567,7 +568,8 @@ class Object(Object_Interface):
                 dependency = self.__dependencies[key]
                 dependency.table.update(
                     lambda x: x.first_id == self[self.identifier_field], {
-                        'DLA_is_current': False})
+                        'DLA_is_current': False}
+                    )
                 new_rows = []
                 if dependency.is_list:
                     if dependency.is_value:
@@ -603,8 +605,7 @@ class Object(Object_Interface):
                     dependency.table.insert(j)
             setattr(self, key, value)
         self.__table.update(lambda x: x[self.identifier_field] == self[
-            self.identifier_field], {
-            'DLA_is_current': False})
+            self.identifier_field], {'DLA_is_current': False})
         self.__table.insert({**data, **dla_data_insert()})
 
     def delete(self) -> None:
@@ -653,8 +654,7 @@ class Object(Object_Interface):
             for j in new_rows:
                 dependency.table.insert(j)
         self.__table.update(lambda x: x[self.identifier_field] == self[
-            self.identifier_field], {
-            'DLA_is_current': False})
+            self.identifier_field], {'DLA_is_current': False})
         self.__table.insert({**data, **dla_data_delete()})
 
     @classmethod
@@ -670,7 +670,8 @@ class Object(Object_Interface):
     @classmethod
     def get_by_id(cls, id_param) -> Optional["Object"]:
         cls._update_info(
-            lambda x: x[cls.identifier_field] == id_param, limit=1, skip=0)
+            lambda x: x[cls.identifier_field] == id_param,
+            limit=1, skip=0)
         return cls.__objects_map.get(id_param)
 
     @classmethod
