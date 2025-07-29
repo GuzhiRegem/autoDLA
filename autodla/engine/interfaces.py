@@ -2,6 +2,7 @@ from dataclasses import Field, dataclass
 from typing import (
     Any,
     NotRequired,
+    Self,
     Tuple,
     Type,
     ClassVar,
@@ -327,7 +328,7 @@ class Table_Interface(ABC):
 
 class Object_Interface(ABC):
     class DependencyRequiredIds(BaseModel):
-        type: Type['Object_Interface']
+        type: Type["Object_Interface"]
         ids: set[str]
 
     class ObjectDependency(BaseModel):
@@ -339,9 +340,9 @@ class Object_Interface(ABC):
 
     _table: ClassVar[Optional['Table_Interface']] = None
     _dependencies: ClassVar[dict[str, ObjectDependency]] = dict()
-    identifier_field: ClassVar[str] = "id"
-    _objects_list: ClassVar[List['Object_Interface']] = list()
-    _objects_map: ClassVar[dict[str, 'Object_Interface']] = dict()
+    _identifier_field: ClassVar[str] = "id"
+    _objects_list: ClassVar[List[Self]] = list()
+    _objects_map: ClassVar[dict[str, Self]] = dict()
 
     @classmethod
     @abstractmethod
@@ -374,7 +375,7 @@ class Object_Interface(ABC):
     def _update_individual(
         cls,
         data_inp: dict[str, Any]
-    ) -> Optional['Object_Interface']:
+    ) -> Optional[Self]:
         ...
 
     @classmethod
@@ -386,12 +387,12 @@ class Object_Interface(ABC):
         skip: int = 0,
         only_current: bool = True,
         only_active: bool = True
-    ) -> list['Object_Interface']:
+    ) -> list[Self]:
         ...
 
     @classmethod
     @abstractmethod
-    def new(cls, **kwargs) -> 'Object_Interface':
+    def new(cls, **kwargs) -> Self:
         ...
 
     @abstractmethod
@@ -412,7 +413,7 @@ class Object_Interface(ABC):
         cls,
         limit: Optional[int] = 10,
         skip: int = 0
-    ) -> list["Object_Interface"]:
+    ) -> list[Self]:
         ...
 
     @classmethod
@@ -422,7 +423,7 @@ class Object_Interface(ABC):
         lambda_f: Optional[Callable[[Any], bool]],
         limit: Optional[int] = 10,
         skip: int = 0
-    ) -> list["Object_Interface"]:
+    ) -> list[Self]:
         ...
 
     @classmethod
@@ -430,7 +431,7 @@ class Object_Interface(ABC):
     def get_by_id(
         cls,
         id_param: str
-    ) -> Optional["Object_Interface"]:
+    ) -> Optional[Self]:
         ...
 
     @classmethod

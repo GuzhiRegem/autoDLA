@@ -6,6 +6,7 @@ from typing import (
     Any,
     Callable,
     Optional,
+    Self,
     Type,
     TypeVar,
     Union,
@@ -203,6 +204,16 @@ class Table(Table_Interface):
 
 
 class Object(BaseModel, Object_Interface):
+    def __init_subclass__(cls, **kwargs):
+        cls.init_class()
+
+    @classmethod
+    def init_class(cls) -> None:
+        cls._table = None
+        cls._dependencies = dict()
+        cls._identifier_field = "id"
+        cls._objects_list = list()
+        cls._objects_map = dict()
 
     @classmethod
     def delete_all(cls) -> None:
@@ -341,13 +352,13 @@ class Object(BaseModel, Object_Interface):
     def _update_individual(
         cls,
         data_inp: dict[str, Any]
-    ) -> Optional['Object_Interface']:
+    ) -> Optional[Self]:
         logger.debug(f"UPDATE INDIVIDUAL: {cls} {data_inp}")
         data: dict[str, Any] = {}
         for k, v in data_inp.items():
             if not k.upper().startswith("DLA_"):
                 data[k] = v
-        found = cls._objects_map.get(data[cls.identifier_field])
+        found = cls._objects_map.get(data[cls._identifier_field])
         try:
             cls.model_validate(data)
         except Exception as e:
@@ -357,9 +368,9 @@ class Object(BaseModel, Object_Interface):
         if found is not None:
             found.__dict__.update(data)
             return found
-        obj: 'Object' = cls(**data)
+        obj: Self = cls(**data)
         cls._objects_list.append(obj)
-        cls._objects_map[obj[cls.identifier_field]] = obj
+        cls._objects_map[obj[cls._identifier_field]] = obj
         return obj
 
     @classmethod
@@ -370,7 +381,7 @@ class Object(BaseModel, Object_Interface):
         skip: int = 0,
         only_current: bool = True,
         only_active: bool = True
-    ) -> list['Object_Interface']:
+    ) -> list[Self]:
         if cls._table is None:
             return []
         if filter is None:
@@ -386,7 +397,7 @@ class Object(BaseModel, Object_Interface):
             return []
         if res is None:
             return []
-        id_list = res[cls.identifier_field].to_list()
+        id_list = res[cls._identifier_field].to_list()
 
         table_results: dict[str, Optional[pl.DataFrame]] = {}
         dep_tables_required_ids: dict[
@@ -420,21 +431,21 @@ class Object(BaseModel, Object_Interface):
         for k_, v_ in dep_tables_required_ids.items():
             l: list[str] = list(v_.ids)
             tp_: 'Type[Object_Interface]' = v_.type
-            id_field = tp_.identifier_field
+            id_field = tp_._identifier_field
             dep_tables[k_] = {}
             if len(l) == 0:
                 continue
             filter_res = tp_.filter(lambda x: x[id_field] in l)
             for obj in filter_res:
-                dep_tables[k_][getattr(obj, tp_.identifier_field)] = obj
+                dep_tables[k_][getattr(obj, tp_._identifier_field)] = obj
 
-        out = []
+        out: list[Self] = []
         for obj_dic in obj_lis:
             dep_key: str
             for dep_key in cls._dependencies.keys():
                 dep: Object.ObjectDependency = cls._dependencies[dep_key]
                 if dep.is_value:
-                    obj_id: primary_key = obj_dic[cls.identifier_field]
+                    obj_id: primary_key = obj_dic[cls._identifier_field]
                     dep_table: Table_Interface = dep.table
                     table_df: Optional[pl.DataFrame] = dep_table.filter(
                         lambda x: x.first_id == obj_id
@@ -449,7 +460,7 @@ class Object(BaseModel, Object_Interface):
                 t_name = dep.type.__class__.__name__
                 if df is not None and len(df) > 0:
                     lis = df.filter(
-                        df['first_id'] == obj_dic[cls.identifier_field]
+                        df['first_id'] == obj_dic[cls._identifier_field]
                     )[
                         'second_id'].to_list()
                     for row in lis:
@@ -462,18 +473,18 @@ class Object(BaseModel, Object_Interface):
                         obj_dic[dep_key] = obj[dep_key][0]
                     else:
                         obj_dic[dep_key] = None
-            update_obj: Optional['Object_Interface'] = cls._update_individual(
+            update_obj = cls._update_individual(
                 obj_dic)
             if update_obj is not None:
                 out.append(update_obj)
         return out
 
     @classmethod
-    def new(cls, **kwargs) -> 'Object':
+    def new(cls, **kwargs) -> Self:
         if cls._table is None:
             raise ImportError('DB not defined')
-        if cls.identifier_field in kwargs:
-            del kwargs[cls.identifier_field]
+        if cls._identifier_field in kwargs:
+            del kwargs[cls._identifier_field]
         out = cls(**kwargs)
         data = out.to_dict()
         for i in cls._dependencies:
@@ -487,7 +498,7 @@ class Object(BaseModel, Object_Interface):
                     for idx, i in enumerate(getattr(out, field_i)):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
-                            "first_id": out[cls.identifier_field],
+                            "first_id": out[cls._identifier_field],
                             "value": i,
                             "list_index": idx,
                             **dla_data()
@@ -496,8 +507,8 @@ class Object(BaseModel, Object_Interface):
                     for idx, i in enumerate(getattr(out, field_i)):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
-                            "first_id": out[cls.identifier_field],
-                            "second_id": getattr(i, v.type.identifier_field),
+                            "first_id": out[cls._identifier_field],
+                            "second_id": getattr(i, v.type._identifier_field),
                             "list_index": idx,
                             **dla_data()
                         })
@@ -508,12 +519,12 @@ class Object(BaseModel, Object_Interface):
                 if val is not None:
                     v.table.insert({
                         'connection_id': primary_key.generate(),
-                        "first_id": out[cls.identifier_field],
-                        "second_id": val[v.type.identifier_field],
+                        "first_id": out[cls._identifier_field],
+                        "second_id": val[v.type._identifier_field],
                         "list_index": 0,
                         **dla_data()
                     })
-        cls._objects_map[str(out[cls.identifier_field])] = out
+        cls._objects_map[str(out[cls._identifier_field])] = out
         cls._objects_list.append(out)
         return out
 
@@ -521,8 +532,8 @@ class Object(BaseModel, Object_Interface):
         if self._table is None:
             return {}
         self_res = self._table.filter(
-            lambda x: x[self.identifier_field] == getattr(
-                self, self.identifier_field
+            lambda x: x[self._identifier_field] == getattr(
+                self, self._identifier_field
             ),
             limit=None,
             only_active=False,
@@ -533,7 +544,7 @@ class Object(BaseModel, Object_Interface):
         }
         for k, v in self._dependencies.items():
             dep_res = v.table.filter(
-                lambda x: x.first_id == getattr(self, self.identifier_field),
+                lambda x: x.first_id == getattr(self, self._identifier_field),
                 limit=None, only_active=False,
                 only_current=False)
             out[k] = dep_res.to_dicts() if dep_res is not None else []
@@ -554,7 +565,7 @@ class Object(BaseModel, Object_Interface):
                 del data[key]
                 dependency = self._dependencies[key]
                 dependency.table.update(
-                    lambda x: x.first_id == self[self.identifier_field], {
+                    lambda x: x.first_id == self[self._identifier_field], {
                         'DLA_is_current': False}
                     )
                 new_rows = []
@@ -563,7 +574,7 @@ class Object(BaseModel, Object_Interface):
                         for idx, i in enumerate(value):
                             new_rows.append({
                                 'connection_id': primary_key.generate(),
-                                "first_id": self[self.identifier_field],
+                                "first_id": self[self._identifier_field],
                                 "value": i,
                                 "list_index": idx,
                                 **dla_data_insert()
@@ -572,9 +583,9 @@ class Object(BaseModel, Object_Interface):
                         for idx, i in enumerate(value):
                             new_rows.append({
                                 'connection_id': primary_key.generate(),
-                                "first_id": self[self.identifier_field],
+                                "first_id": self[self._identifier_field],
                                 "second_id": i[
-                                    dependency.type.identifier_field],
+                                    dependency.type._identifier_field],
                                 "list_index": idx,
                                 **dla_data_insert()
                             })
@@ -582,17 +593,17 @@ class Object(BaseModel, Object_Interface):
                     if value is not None:
                         new_rows.append({
                             'connection_id': primary_key.generate(),
-                            "first_id": self[self.identifier_field],
+                            "first_id": self[self._identifier_field],
                             "second_id": value[
-                                dependency.type.identifier_field],
+                                dependency.type._identifier_field],
                             "list_index": 0,
                             **dla_data_insert()
                         })
                 for j in new_rows:
                     dependency.table.insert(j)
             setattr(self, key, value)
-        self._table.update(lambda x: x[self.identifier_field] == self[
-            self.identifier_field], {'DLA_is_current': False})
+        self._table.update(lambda x: x[self._identifier_field] == self[
+            self._identifier_field], {'DLA_is_current': False})
         self._table.insert({**data, **dla_data_insert()})
 
     def delete(self) -> None:
@@ -605,7 +616,7 @@ class Object(BaseModel, Object_Interface):
         for key, dependency in self._dependencies.items():
             del data[key]
             dependency.table.update(lambda x: x.first_id == self[
-                self.identifier_field], {'DLA_is_current': False})
+                self._identifier_field], {'DLA_is_current': False})
             value = getattr(self, key)
             if value is None:
                 continue
@@ -615,7 +626,7 @@ class Object(BaseModel, Object_Interface):
                     for idx, i in enumerate(value):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
-                            "first_id": self[self.identifier_field],
+                            "first_id": self[self._identifier_field],
                             "value": i,
                             "list_index": idx,
                             **dla_data_delete()
@@ -624,8 +635,8 @@ class Object(BaseModel, Object_Interface):
                     for idx, i in enumerate(value):
                         new_rows.append({
                             'connection_id': primary_key.generate(),
-                            "first_id": self[self.identifier_field],
-                            "second_id": i[dependency.type.identifier_field],
+                            "first_id": self[self._identifier_field],
+                            "second_id": i[dependency.type._identifier_field],
                             "list_index": idx,
                             **dla_data_delete()
                         })
@@ -633,31 +644,43 @@ class Object(BaseModel, Object_Interface):
                 if value is not None:
                     new_rows.append({
                         'connection_id': primary_key.generate(),
-                        "first_id": self[self.identifier_field],
-                        "second_id": value[dependency.type.identifier_field],
+                        "first_id": self[self._identifier_field],
+                        "second_id": value[dependency.type._identifier_field],
                         "list_index": 0,
                         **dla_data_delete()
                     })
             for j in new_rows:
                 dependency.table.insert(j)
-        self._table.update(lambda x: x[self.identifier_field] == self[
-            self.identifier_field], {'DLA_is_current': False})
+        self._table.update(lambda x: x[self._identifier_field] == self[
+            self._identifier_field], {'DLA_is_current': False})
         self._table.insert({**data, **dla_data_delete()})
 
     @classmethod
-    def all(cls, limit=10, skip=0) -> list[Object_Interface]:
+    def all(
+        cls,
+        limit: Optional[int] = 10,
+        skip: int = 0
+    ) -> list[Self]:
         out = cls._update_info(limit=limit, skip=skip)
         return out
 
     @classmethod
-    def filter(cls, lambda_f, limit=10, skip=0) -> list[Object_Interface]:
+    def filter(
+        cls,
+        lambda_f: Optional[Callable[[Any], bool]],
+        limit: Optional[int] = 10,
+        skip: int = 0
+    ) -> list[Self]:
         out = cls._update_info(filter=lambda_f, limit=limit, skip=skip)
         return out
 
     @classmethod
-    def get_by_id(cls, id_param) -> Optional["Object_Interface"]:
+    def get_by_id(
+        cls,
+        id_param: str
+    ) -> Optional[Self]:
         cls._update_info(
-            lambda x: x[cls.identifier_field] == id_param,
+            lambda x: x[cls._identifier_field] == id_param,
             limit=1, skip=0)
         return cls._objects_map.get(id_param)
 
