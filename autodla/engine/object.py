@@ -1,6 +1,5 @@
 from __future__ import annotations
 from json import JSONEncoder
-from dataclasses import field, _MISSING_TYPE
 from datetime import datetime
 from types import NoneType
 from typing import (
@@ -19,7 +18,7 @@ from typing import (
 import uuid
 import polars as pl
 from autodla.engine.lambda_conversion import lambda_to_sql
-from pydantic import GetCoreSchemaHandler
+from pydantic import GetCoreSchemaHandler, BaseModel, Field
 from pydantic_core import CoreSchema, core_schema, PydanticUndefinedType
 from autodla.utils.logger import logger
 from autodla.engine.interfaces import (
@@ -56,7 +55,7 @@ class primary_key(primary_key_Interface):
 
     @staticmethod
     def auto_increment():
-        return field(default_factory=lambda: primary_key.generate())
+        return Field(default_factory=lambda: primary_key.generate())
 
     def __eq__(self, value):
         if isinstance(value, str):
@@ -204,10 +203,10 @@ class Table(Table_Interface):
         self.db.execute(qry)
 
 
-class Object(Object_Interface):
+class Object(BaseModel, Object_Interface):
     __table: ClassVar[Optional[Table | None]] = None
     __dependencies: ClassVar[dict[str, Object_Interface.ObjectDependency]] = (
-        field(
+        Field(
             default_factory=dict
         )
     )
@@ -332,11 +331,9 @@ class Object(Object_Interface):
                 raise TypeError(
                     'Field initialized to None must be of type Optional')
             if type(fields[i].default) not in [
-                    _MISSING_TYPE,
                     PydanticUndefinedType]:
                 type_out["default"] = fields[i].default
             if type(fields[i].default_factory) not in [
-                    _MISSING_TYPE,
                     PydanticUndefinedType]:
                 type_out["default_factory"] = fields[i].default_factory
             if ori == list:

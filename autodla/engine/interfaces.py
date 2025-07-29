@@ -325,7 +325,7 @@ class Table_Interface(ABC):
         ...
 
 
-class Object_Interface(BaseModel, ABC):
+class Object_Interface(ABC):
     class DependencyRequiredIds(BaseModel):
         type: Type['Object_Interface']
         ids: set[str]
