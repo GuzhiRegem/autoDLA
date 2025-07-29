@@ -336,11 +336,12 @@ class Object_Interface(ABC):
         is_value: bool
         type: Type
         table: 'Table_Interface'
-    __table: ClassVar[Optional['Table_Interface']]
-    __dependencies: ClassVar[dict[str, ObjectDependency]]
-    identifier_field: ClassVar[str]
-    __objects_list: ClassVar[List['Object_Interface']]
-    __objects_map: ClassVar[dict[str, 'Object_Interface']]
+
+    _table: ClassVar[Optional['Table_Interface']] = None
+    _dependencies: ClassVar[dict[str, ObjectDependency]] = dict()
+    identifier_field: ClassVar[str] = "id"
+    _objects_list: ClassVar[List['Object_Interface']] = list()
+    _objects_map: ClassVar[dict[str, 'Object_Interface']] = dict()
 
     @classmethod
     @abstractmethod
