@@ -13,6 +13,7 @@ from autodla.utils.watchdog import Watchdog
 from autodla.dbs.memorydb import MemoryDB
 from autodla.utils.df_tools import df_comparator, ensure_dtype_equality
 import traceback
+import atexit
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 if "DATETIME_FORMAT" in os.environ:
@@ -214,6 +215,10 @@ class PostgresDB(MemoryDB):
         self.__mid_sync = False
         self.connect()
 
+        @atexit.register
+        def atexit_func():
+            self.exit()
+
     def connect(self) -> bool:
         """
         Connects to the PostgreSQL database.
@@ -375,9 +380,12 @@ class PostgresDB(MemoryDB):
             self._execute(external_querys)
         logger.debug("Syncing to PostgreSQL completed.")
         self.__mid_sync = False
-
+    
     def exit(self) -> None:
+        if not self.__atached:
+            return
         self.sync()
+        self.__atached = False
         return super().exit()
 
     def snapshot_tables_external(self) -> dict[str, pl.DataFrame]:

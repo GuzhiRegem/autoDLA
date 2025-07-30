@@ -1,3 +1,4 @@
+import atexit
 import sqlite3
 from typing import List, Optional
 import polars as pl
@@ -184,6 +185,10 @@ class MemoryDB(DB_Connection):
         self.tables = {}
         super().__init__(dt, MemoryQueryBuilder(dt))
         self.__querys_executed_memory = 0
+
+        @atexit.register
+        def atexit_func():
+            self.exit()
 
     @property
     def usage_metrics(self):
