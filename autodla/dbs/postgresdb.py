@@ -380,13 +380,14 @@ class PostgresDB(MemoryDB):
             self._execute(external_querys)
         logger.debug("Syncing to PostgreSQL completed.")
         self.__mid_sync = False
-    
+
     def exit(self) -> None:
-        if not self.__atached:
+        if self.__atached is False:
             return
+        logger.debug("Closing Postgres connection...")
         self.sync()
+        super().exit()
         self.__atached = False
-        return super().exit()
 
     def snapshot_tables_external(self) -> dict[str, pl.DataFrame]:
         out: dict[str, pl.DataFrame] = {}
