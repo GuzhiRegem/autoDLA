@@ -127,6 +127,7 @@ class FastApiWebConnection(WebConnection):
             async def lifespan(app):
                 asyncio.create_task(poll_watchdog())
                 yield
+                self.db.exit()
             app.lifespan = lifespan  # type: ignore
 
         self.admin_endpoints_prefix = admin_endpoints_prefix
