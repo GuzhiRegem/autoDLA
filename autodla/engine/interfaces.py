@@ -2,6 +2,7 @@ from dataclasses import Field, dataclass
 from typing import (
     Any,
     NotRequired,
+    Self,
     Tuple,
     Type,
     ClassVar,
@@ -258,9 +259,8 @@ class primary_key_Interface(str, ABC):
     ) -> CoreSchema:
         ...
 
-    @abstractmethod
     def __hash__(self) -> int:
-        ...
+        return super().__hash__()
 
 
 class Table_Interface(ABC):
@@ -326,9 +326,9 @@ class Table_Interface(ABC):
         ...
 
 
-class Object_Interface(BaseModel, ABC):
+class Object_Interface(ABC):
     class DependencyRequiredIds(BaseModel):
-        type: Type['Object_Interface']
+        type: Type["Object_Interface"]
         ids: set[str]
 
     class ObjectDependency(BaseModel):
@@ -337,11 +337,12 @@ class Object_Interface(BaseModel, ABC):
         is_value: bool
         type: Type
         table: 'Table_Interface'
-    __table: ClassVar[Optional['Table_Interface']]
-    __dependencies: ClassVar[dict[str, ObjectDependency]]
-    identifier_field: ClassVar[str]
-    __objects_list: ClassVar[List['Object_Interface']]
-    __objects_map: ClassVar[dict[str, 'Object_Interface']]
+
+    _table: ClassVar[Optional['Table_Interface']] = None
+    _dependencies: ClassVar[dict[str, ObjectDependency]] = dict()
+    _identifier_field: ClassVar[str] = "id"
+    _objects_list: ClassVar[List[Self]] = list()
+    _objects_map: ClassVar[dict[str, Self]] = dict()
 
     @classmethod
     @abstractmethod
@@ -374,7 +375,7 @@ class Object_Interface(BaseModel, ABC):
     def _update_individual(
         cls,
         data_inp: dict[str, Any]
-    ) -> Optional['Object_Interface']:
+    ) -> Optional[Self]:
         ...
 
     @classmethod
@@ -386,12 +387,12 @@ class Object_Interface(BaseModel, ABC):
         skip: int = 0,
         only_current: bool = True,
         only_active: bool = True
-    ) -> list['Object_Interface']:
+    ) -> list[Self]:
         ...
 
     @classmethod
     @abstractmethod
-    def new(cls, **kwargs) -> 'Object_Interface':
+    def new(cls, **kwargs) -> Self:
         ...
 
     @abstractmethod
@@ -412,7 +413,7 @@ class Object_Interface(BaseModel, ABC):
         cls,
         limit: Optional[int] = 10,
         skip: int = 0
-    ) -> list["Object_Interface"]:
+    ) -> list[Self]:
         ...
 
     @classmethod
@@ -422,7 +423,7 @@ class Object_Interface(BaseModel, ABC):
         lambda_f: Optional[Callable[[Any], bool]],
         limit: Optional[int] = 10,
         skip: int = 0
-    ) -> list["Object_Interface"]:
+    ) -> list[Self]:
         ...
 
     @classmethod
@@ -430,7 +431,7 @@ class Object_Interface(BaseModel, ABC):
     def get_by_id(
         cls,
         id_param: str
-    ) -> Optional["Object_Interface"]:
+    ) -> Optional[Self]:
         ...
 
     @classmethod

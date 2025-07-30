@@ -1,5 +1,6 @@
 import os
-os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
+from typing import Optional
+#os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from autodla import Object, primary_key
 from autodla.dbs import MemoryDB
 
@@ -14,6 +15,7 @@ class User(Object):
 class Group(Object):
     id: primary_key = primary_key.auto_increment()
     participants: list[User]  # Nested structure
+    leader: Optional[User] = None
     group_name: str
 
 
@@ -22,7 +24,38 @@ class Group(Object):
 db = MemoryDB()
 db.attach([User, Group])
 
+db.clean_db(DO_NOT_ASK=True)
+
+usr1 = User.new(
+    name="jhon",
+    age=20
+)
+usr2 = User.new(
+    name="max",
+    age=21
+)
+grp = Group.new(
+    group_name="",
+    participants=[]
+)
+
+print(f"\ncreate group with id {grp.id}")
+print(Group.get_by_id(grp.id))
+print("\nadd users")
+grp.update(
+    participants=[usr1, usr2]
+)
+print(Group.get_by_id(grp.id))
+print("\nset leader")
+grp.update(
+    leader=usr2
+)
+print(Group.get_by_id(grp.id))
+print("\nremove leader")
+grp.update(
+    leader=None
+)
+print(Group.get_by_id(grp.id))
+
 
 db.exit()
-
-
