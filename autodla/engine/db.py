@@ -200,15 +200,9 @@ class DB_Connection(DB_Connection_Interface):
         qry = query_builder.create_table(table_name_db, converted_schema)
         execute_function(qry)
         updated_data_schema = self.get_table_definition(table_name)
-        print('UPDATED DATA SCHEMA:', updated_data_schema)
         key: str  # type annotation for key
         for key in set(
             *[list(updated_data_schema.keys()) + list(data_schema.keys())]
         ):
             if key not in updated_data_schema or key not in data_schema:
-                print("------------------")
-                print(updated_data_schema)
-                print()
-                print(data_schema)
-                print("------------------")
                 raise ValueError("DATA SCHEMA NOT UPDATED")

@@ -415,7 +415,7 @@ class Object(BaseModel, Object_Interface):
             df: Optional[pl.DataFrame] = table_results[k]
             if df is not None:
                 ids = set(df['second_id'].to_list())
-            t_name: str = v.type.__class__.__name__
+            t_name: str = v.type.__name__
             if t_name not in dep_tables_required_ids:
                 tp: 'Type[Object_Interface]' = v.type
                 dep_tables_required_ids[t_name] = (
@@ -457,7 +457,7 @@ class Object(BaseModel, Object_Interface):
                     continue
                 df = table_results[dep_key]
                 val_lis = []
-                t_name = dep.type.__class__.__name__
+                t_name = dep.type.__name__
                 if df is not None and len(df) > 0:
                     lis = df.filter(
                         df['first_id'] == obj_dic[cls._identifier_field]
@@ -470,7 +470,7 @@ class Object(BaseModel, Object_Interface):
                 obj_dic[dep_key] = val_lis
                 if not cls._dependencies[dep_key].is_list:
                     if obj_dic[dep_key] != []:
-                        obj_dic[dep_key] = obj[dep_key][0]
+                        obj_dic[dep_key] = obj_dic[dep_key][0]
                     else:
                         obj_dic[dep_key] = None
             update_obj = cls._update_individual(
@@ -682,7 +682,8 @@ class Object(BaseModel, Object_Interface):
         cls._update_info(
             lambda x: x[cls._identifier_field] == id_param,
             limit=1, skip=0)
-        return cls._objects_map.get(id_param)
+        out = cls._objects_map.get(str(id_param))
+        return out
 
     @classmethod
     def get_table_res(
