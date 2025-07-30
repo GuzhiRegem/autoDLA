@@ -1,0 +1,35 @@
+import os
+from typing import Optional
+#os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
+from autodla import Object, primary_key
+from autodla.dbs import PostgresDB
+
+
+# Create models
+class User(Object):
+    id: primary_key = primary_key.auto_increment()
+    name: str
+    age: int
+
+
+class Group(Object):
+    id: primary_key = primary_key.auto_increment()
+    participants: list[User]  # Nested structure
+    leader: Optional[User] = None
+    group_name: str
+
+
+# Connect to DB and register models. MemoryDB keeps a local SQLite store
+# and periodically syncs to the PostgreSQL server.
+db = PostgresDB()
+db.attach([User, Group])
+
+User.new(
+    name="jhon",
+    age=20
+)
+for usr in User.all(limit=None):
+    print(usr.id, type(usr.id))
+print("------------")
+print(User.get_by_id(User.all(limit=None)[5].id))
+db.exit()
