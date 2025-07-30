@@ -367,7 +367,7 @@ class Object(BaseModel, Object_Interface):
             return None
         if found is not None:
             del data[cls._identifier_field]
-            found.__dict__.update(data)
+            found.model_copy(update=data)
             return found
         obj: Self = cls(**data)
         cls._objects_list.append(obj)
@@ -439,7 +439,7 @@ class Object(BaseModel, Object_Interface):
                 continue
             filter_res = tp_.filter(lambda x: x[id_field] in l)
             for obj in filter_res:
-                dep_tables[k_][getattr(obj, tp_._identifier_field)] = obj
+                dep_tables[k_][str(getattr(obj, tp_._identifier_field))] = obj
 
         out: list[Self] = []
         for obj_dic in obj_lis:
