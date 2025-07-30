@@ -102,13 +102,13 @@ class PostgresQueryBuilder(QueryBuilder_Interface):
         where: str
     ) -> str:
         qry = (
-            f"UPDATE {to_name(table)} SET"
+            f"UPDATE {to_name(table)} SET "
             f"{', '.join([
                 (
                     f'{k.upper()} = {self._data_transformer.convert_data(v)}'
                 ) for k, v in values.items()
             ])}"
-            f" WHERE {where}"
+            f" WHERE {where} "
         )
         return qry
 
@@ -117,7 +117,7 @@ class PostgresQueryBuilder(QueryBuilder_Interface):
         table: str,
         where: str
     ) -> str:
-        qry = f"DELETE FROM {to_name(table)} WHERE {where}"
+        qry = f"DELETE FROM {to_name(table)} WHERE {where} "
         return qry
 
     def create_table(

@@ -1,5 +1,8 @@
+from datetime import datetime
 import os
 from typing import Optional
+
+from pydantic import Field
 #os.environ['AUTODLA_SQL_VERBOSE'] = 'true'
 from autodla import Object, primary_key
 from autodla.dbs import PostgresDB
@@ -10,6 +13,7 @@ class User(Object):
     id: primary_key = primary_key.auto_increment()
     name: str
     age: int
+    created_at: datetime = Field(default_factory=datetime.now)
 
 
 class Group(Object):
@@ -29,7 +33,6 @@ User.new(
     age=20
 )
 for usr in User.all(limit=None):
-    print(usr.id, type(usr.id))
-print("------------")
-print(User.get_by_id(User.all(limit=None)[5].id))
+    print(usr)
+
 db.exit()
