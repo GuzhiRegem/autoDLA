@@ -125,10 +125,19 @@ class FastApiWebConnection(WebConnection):
         if poll_watchdog := getattr(db, "poll_watchdog", None):
             @asynccontextmanager
             async def lifespan(app):
-                asyncio.create_task(poll_watchdog())
-                yield
-                self.db.exit()
-            app.lifespan = lifespan  # type: ignore
+                task = asyncio.create_task(poll_watchdog())
+                try:
+                    yield
+                finally:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    self.db.exit()
+            
+            # Set the lifespan directly
+            app.router.lifespan_context = lifespan
 
         self.admin_endpoints_prefix = admin_endpoints_prefix
         super().__init__(FastApiEndpointMaker(), setup_autodla_web)

@@ -15,31 +15,10 @@ class User(Object):
     age: int
     tags: list[str] = list()
 
-
-class Group(Object):
-    id: primary_key = primary_key.auto_increment()
-    group_name: str
-    participants: list[User]
-
-
 # Connect to DB and register models. MemoryDB keeps a local SQLite store
 # and periodically syncs to the PostgreSQL server.
 db = PostgresDB()
-db.attach([User, Group])
-
-
-# setup DB
-db.clean_db(DO_NOT_ASK=True)
-lis = []
-for i in range(2):
-    lis.append(User.new(
-        name=DataGenerator.name(),
-        age=DataGenerator.age()
-    ))
-g = Group.new(
-    participants=lis,
-    group_name="Group 1"
-)
+db.attach([User])
 
 
 # Create fastapi app and add router
@@ -54,10 +33,14 @@ app.add_middleware(
 conn = FastApiWebConnection(app, db)
 
 
-# Custom authentication endpoint
-@app.get("/custom")
-@conn.admin_endpoint
-async def custom_endpoint(name: Optional[str] = None):
-    if name:
-        return {"message": f"Hello, {name}!"}
-    return {"message": "Hello, World!"}
+@app.get("/list_users")
+async def list_users():
+    return User.all(limit=None)
+
+
+@app.post("/new_user")
+async def new_user():
+    return User.new(
+        name=DataGenerator.name(),
+        age=DataGenerator.age()
+    )
