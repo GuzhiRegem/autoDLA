@@ -43,7 +43,7 @@ primary_key_type = TypeVar('primary_key_type', bound='primary_key')
 
 class primary_key(primary_key_Interface):
     @classmethod
-    def generate(cls: Type[primary_key_type]) -> primary_key_type:
+    def generate(cls: Type[Self]) -> Self:
         return cls(str(uuid.uuid4()))
 
     def is_valid(self):
@@ -358,7 +358,7 @@ class Object(BaseModel, Object_Interface):
         for k, v in data_inp.items():
             if not k.upper().startswith("DLA_"):
                 data[k] = v
-        found = cls._objects_map.get(data[cls._identifier_field])
+        found = cls._objects_map.get(str(data[cls._identifier_field]))
         try:
             cls.model_validate(data)
         except Exception as e:
@@ -366,11 +366,13 @@ class Object(BaseModel, Object_Interface):
                 f"Validation error for {cls.__name__} with data {data}: {e}")
             return None
         if found is not None:
+            del data[cls._identifier_field]
             found.__dict__.update(data)
             return found
         obj: Self = cls(**data)
         cls._objects_list.append(obj)
-        cls._objects_map[obj[cls._identifier_field]] = obj
+        map_key = str(obj[cls._identifier_field])
+        cls._objects_map[map_key] = obj
         return obj
 
     @classmethod
@@ -524,7 +526,8 @@ class Object(BaseModel, Object_Interface):
                         "list_index": 0,
                         **dla_data()
                     })
-        cls._objects_map[str(out[cls._identifier_field])] = out
+        map_key = str(out[cls._identifier_field])
+        cls._objects_map[map_key] = out
         cls._objects_list.append(out)
         return out
 
@@ -679,10 +682,11 @@ class Object(BaseModel, Object_Interface):
         cls,
         id_param: str
     ) -> Optional[Self]:
+        id_param = str(id_param)
         cls._update_info(
             lambda x: x[cls._identifier_field] == id_param,
             limit=1, skip=0)
-        out = cls._objects_map.get(str(id_param))
+        out = cls._objects_map.get(id_param)
         return out
 
     @classmethod
