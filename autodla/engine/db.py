@@ -121,7 +121,7 @@ class DB_Connection(DB_Connection_Interface):
                 class_out[k] = {
                     "type": type_st
                 }
-                if class_i.identifier_field == k:
+                if class_i._identifier_field == k:
                     class_out[k]["primary_key"] = True
                 if "depends" in f:
                     class_out[k]["depends"] = f'$ref:{f["depends"].__name__}'
